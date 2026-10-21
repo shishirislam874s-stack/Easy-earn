@@ -9,6 +9,7 @@ import {
   removeAuthToken,
   setAdminToken,
   removeAdminToken,
+  safeJson,
 } from '../lib/api';
 
 interface AuthContextType {
@@ -132,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch('/api/config');
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         setConfig(data);
       }
     } catch (err) {
@@ -149,7 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const res = await authFetch('/api/auth/me', {}, activeToken);
       if (res.ok) {
-        const data = await res.json();
+        const data = await safeJson(res);
         setUser(data.user);
         setEarnedToday(data.earnedToday || 0);
         setDailyCap(data.dailyCap || 0);
@@ -196,9 +197,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ phone: cleanPhone, password: pass }),
         credentials: 'include',
       });
-      const data = await res.json();
+      const data = await safeJson(res, 'লগইন অনুরোধ ব্যর্থ হয়েছে');
       if (!res.ok) {
-        return { success: false, error: data.error || 'Login failed' };
+        return { success: false, error: data?.error || 'Login failed' };
       }
       if (data.token) {
         setAuthToken(data.token);
@@ -223,9 +224,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ name: name.trim(), phone: cleanPhone, password: pass, refCode: finalRef }),
         credentials: 'include',
       });
-      const data = await res.json();
+      const data = await safeJson(res, 'রেজিস্ট্রেশন অনুরোধ ব্যর্থ হয়েছে');
       if (!res.ok) {
-        return { success: false, error: data.error || 'Registration failed' };
+        return { success: false, error: data?.error || 'Registration failed' };
       }
       if (data.token) {
         setAuthToken(data.token);
@@ -258,9 +259,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ username: username.trim(), password: pass }),
         credentials: 'include',
       });
-      const data = await res.json();
+      const data = await safeJson(res, 'অ্যাডমিন লগইন ব্যর্থ হয়েছে');
       if (!res.ok) {
-        return { success: false, error: data.error || 'Admin login failed' };
+        return { success: false, error: data?.error || 'Admin login failed' };
       }
       if (data.token) {
         setAdminToken(data.token);

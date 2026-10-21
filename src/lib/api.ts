@@ -65,3 +65,30 @@ export function adminFetch(url: string, options: RequestInit = {}, explicitToken
     credentials: 'include',
   });
 }
+
+export async function safeJson<T = any>(res: Response, defaultMessage = 'অনুরোধটি সম্পন্ন করা যায়নি'): Promise<T> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      return await res.json();
+    } catch {
+      // Continue to error extraction
+    }
+  }
+
+  // If HTML or plaintext error from host (e.g., Vercel 404 / 502)
+  let hint = defaultMessage;
+  if (res.status === 404) {
+    hint = 'সার্ভার এপিআই পাওয়া যায়নি (404)। Vercel এ ব্যাকএন্ড কনফিগারেশন রিলোড করুন।';
+  } else if (res.status === 500) {
+    hint = 'সার্ভার অভ্যন্তরীণ সমস্যা (500 Internal Error)';
+  } else if (res.status === 502 || res.status === 504) {
+    hint = 'সার্ভার রেসপন্স গেটওয়ে টাইমআউট (502/504)';
+  } else if (!res.ok) {
+    hint = `সার্ভার সমস্যা (HTTP ${res.status})`;
+  }
+
+  const err = new Error(hint);
+  (err as any).status = res.status;
+  throw err;
+}

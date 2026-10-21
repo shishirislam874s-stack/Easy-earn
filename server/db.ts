@@ -32,7 +32,10 @@ export interface DatabaseSchema {
   broadcasts: Broadcast[];
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+const DATA_DIR = isServerless
+  ? path.resolve('/tmp', 'earn_app_data')
+  : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'db.json');
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -71,6 +74,19 @@ class DatabaseManager {
     try {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+
+      // In serverless /tmp environment, populate from bundled data/db.json seed if available
+      if (!fs.existsSync(DB_FILE)) {
+        const seedPath = path.resolve(process.cwd(), 'data', 'db.json');
+        if (fs.existsSync(seedPath)) {
+          try {
+            const seedRaw = fs.readFileSync(seedPath, 'utf-8');
+            fs.writeFileSync(DB_FILE, seedRaw, 'utf-8');
+          } catch (e) {
+            console.warn('Could not copy seed database to DATA_DIR:', e);
+          }
+        }
       }
 
       if (fs.existsSync(DB_FILE)) {

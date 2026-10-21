@@ -69,6 +69,17 @@
   "history": [],
   "notifications": [
     {
+      "id": "notif-1792549091238-mxb0",
+      "userId": "1002",
+      "titleEn": "Welcome to Earn App!",
+      "titleBn": "আর্ন অ্যাপে আপনাকে স্বাগতম!",
+      "messageEn": "Please activate your ID from the Category menu to start earning.",
+      "messageBn": "কাজ শুরু করতে অনুগ্রহ করে ক্যাটাগরি মেনু থেকে আইডি এক্টিভ করুন।",
+      "type": "activation",
+      "isRead": false,
+      "createdAt": "2026-10-21T02:18:11.238Z"
+    },
+    {
       "id": "notif-1792057424292-58gj",
       "userId": "1002",
       "titleEn": "Welcome to Earn App!",

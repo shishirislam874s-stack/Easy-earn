@@ -62,13 +62,24 @@ interface SessionData {
 const userSessions = new Map<string, SessionData>();
 const adminSessions = new Map<string, SessionData>();
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+const DATA_DIR = isServerless
+  ? path.resolve('/tmp', 'earn_app_data')
+  : path.resolve(process.cwd(), 'data');
 const SESSIONS_FILE = path.resolve(DATA_DIR, 'sessions.json');
 
 function initSessionsPersistence() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(SESSIONS_FILE)) {
+      const seedFile = path.resolve(process.cwd(), 'data', 'sessions.json');
+      if (fs.existsSync(seedFile)) {
+        try {
+          fs.writeFileSync(SESSIONS_FILE, fs.readFileSync(seedFile, 'utf-8'), 'utf-8');
+        } catch {}
+      }
     }
     if (fs.existsSync(SESSIONS_FILE)) {
       const content = fs.readFileSync(SESSIONS_FILE, 'utf-8');
