@@ -12,25 +12,7 @@ import path from "path";
 
 // data/db.json
 var db_default = {
-  users: [
-    {
-      id: "1001",
-      name: "Shishir",
-      phone: "01621794375",
-      passwordHash: "$2b$10$JrS.kqgzrVhWVBHhNRdX3ObU2hKjo9QUjtl5wCFhAmxZTSTreweZi",
-      category: null,
-      isActive: false,
-      isBlocked: false,
-      balance: 0,
-      referredBy: null,
-      referralCode: "EARN1001",
-      workUntil: null,
-      isTeamLeader: false,
-      activatedAt: null,
-      createdAt: "2026-10-15T09:33:28.212Z",
-      updatedAt: "2026-10-15T09:33:28.212Z"
-    }
-  ],
+  users: [],
   videos: [
     {
       id: "vid-1",
@@ -80,19 +62,7 @@ var db_default = {
   withdrawRequests: [],
   teamBonuses: [],
   history: [],
-  notifications: [
-    {
-      id: "notif-1792056808212-uscl",
-      userId: "1001",
-      titleEn: "Welcome to Earn App!",
-      titleBn: "\u0986\u09B0\u09CD\u09A8 \u0985\u09CD\u09AF\u09BE\u09AA\u09C7 \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09B8\u09CD\u09AC\u09BE\u0997\u09A4\u09AE!",
-      messageEn: "Please activate your ID from the Category menu to start earning.",
-      messageBn: "\u0995\u09BE\u099C \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF \u09AE\u09C7\u09A8\u09C1 \u09A5\u09C7\u0995\u09C7 \u0986\u0987\u09A1\u09BF \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C1\u09A8\u0964",
-      type: "activation",
-      isRead: false,
-      createdAt: "2026-10-15T09:33:28.212Z"
-    }
-  ],
+  notifications: [],
   settings: {
     payment_number_bkash: "01604606880",
     payment_number_nagad: "01604606880",
@@ -632,14 +602,30 @@ router.post("/auth/register", async (req, res) => {
         throw new Error("\u09B0\u09C7\u099C\u09BF\u09B8\u09CD\u099F\u09CD\u09B0\u09C7\u09B6\u09A8\u09C7\u09B0 \u099C\u09A8\u09CD\u09AF \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1 \u09A6\u09C7\u0993\u09DF\u09BE \u09AC\u09BE\u09A7\u09CD\u09AF\u09A4\u09BE\u09AE\u09C2\u09B2\u0995 / Referral code is required to register");
       }
       const cleanRef = refCode.trim();
-      const found = schema.users.find(
-        (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
-      );
-      if (!found) {
-        throw new Error("\u09AD\u09C1\u09B2 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1! \u09B8\u09A0\u09BF\u0995 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1 \u09AA\u09CD\u09B0\u09A6\u09BE\u09A8 \u0995\u09B0\u09C1\u09A8 / Invalid referral code. Please enter a valid referral code");
+      const cleanRefLower = cleanRef.toLowerCase();
+      const isAdminMasterRef = cleanRefLower === "admin" || cleanRefLower === "slshishir" || cleanRefLower === "earnadmin" || cleanRefLower === "earn1000";
+      let referrerId = null;
+      let referrerUser = null;
+      if (isAdminMasterRef) {
+        const adminUserInDb = schema.users.find(
+          (u) => u.referralCode.toLowerCase() === "admin" || u.referralCode.toLowerCase() === "earn1001"
+        );
+        if (adminUserInDb) {
+          referrerId = adminUserInDb.id;
+          referrerUser = adminUserInDb;
+        } else {
+          referrerId = "ADMIN";
+        }
+      } else {
+        const found = schema.users.find(
+          (u) => u.referralCode.toLowerCase() === cleanRefLower || u.id === cleanRef
+        );
+        if (!found) {
+          throw new Error("\u09AD\u09C1\u09B2 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1! \u09B8\u09A0\u09BF\u0995 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1 \u09AA\u09CD\u09B0\u09A6\u09BE\u09A8 \u0995\u09B0\u09C1\u09A8 (\u098F\u09A1\u09AE\u09BF\u09A8 \u09B0\u09C7\u09AB\u09BE\u09B0 \u0995\u09CB\u09A1: ADMIN) / Invalid referral code. (Admin code: ADMIN)");
+        }
+        referrerId = found.id;
+        referrerUser = found;
       }
-      const referrerId = found.id;
-      const referrerUser = found;
       const newId = String(schema.users.length + 1001);
       const referralCode = `EARN${newId}`;
       const passwordHash = bcrypt.hashSync(password, 10);
@@ -799,10 +785,13 @@ router.get("/auth/me", requireUser, (req, res) => {
   });
 });
 router.get("/referral/lookup/:code", (req, res) => {
-  const code = (req.params.code || "").trim();
+  const code = (req.params.code || "").trim().toLowerCase();
+  if (code === "admin" || code === "slshishir" || code === "earnadmin" || code === "earn1000") {
+    return res.json({ found: true, name: "Admin (Official)", code: "ADMIN" });
+  }
   const snapshot = db.getSnapshot();
   const found = snapshot.users.find(
-    (u) => u.referralCode.toLowerCase() === code.toLowerCase() || u.id === code
+    (u) => u.referralCode.toLowerCase() === code || u.id === code
   );
   if (found) {
     return res.json({ found: true, name: found.name, code: found.referralCode });

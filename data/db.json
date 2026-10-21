@@ -1,23 +1,5 @@
 {
-  "users": [
-    {
-      "id": "1001",
-      "name": "Shishir",
-      "phone": "01621794375",
-      "passwordHash": "$2b$10$JrS.kqgzrVhWVBHhNRdX3ObU2hKjo9QUjtl5wCFhAmxZTSTreweZi",
-      "category": null,
-      "isActive": false,
-      "isBlocked": false,
-      "balance": 0,
-      "referredBy": null,
-      "referralCode": "EARN1001",
-      "workUntil": null,
-      "isTeamLeader": false,
-      "activatedAt": null,
-      "createdAt": "2026-10-15T09:33:28.212Z",
-      "updatedAt": "2026-10-15T09:33:28.212Z"
-    }
-  ],
+  "users": [],
   "videos": [
     {
       "id": "vid-1",
@@ -67,19 +49,7 @@
   "withdrawRequests": [],
   "teamBonuses": [],
   "history": [],
-  "notifications": [
-    {
-      "id": "notif-1792056808212-uscl",
-      "userId": "1001",
-      "titleEn": "Welcome to Earn App!",
-      "titleBn": "আর্ন অ্যাপে আপনাকে স্বাগতম!",
-      "messageEn": "Please activate your ID from the Category menu to start earning.",
-      "messageBn": "কাজ শুরু করতে অনুগ্রহ করে ক্যাটাগরি মেনু থেকে আইডি এক্টিভ করুন।",
-      "type": "activation",
-      "isRead": false,
-      "createdAt": "2026-10-15T09:33:28.212Z"
-    }
-  ],
+  "notifications": [],
   "settings": {
     "payment_number_bkash": "01604606880",
     "payment_number_nagad": "01604606880",

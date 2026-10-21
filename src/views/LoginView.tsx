@@ -169,16 +169,16 @@ export function LoginView({ onGoToAdminLogin, onLoginSuccess }: LoginViewProps) 
             <div>
               <LiquidInput
                 label={t.referralCodeRequired || t.referralCodeOptional}
-                placeholder="EARN1001"
+                placeholder="ADMIN অথবা রেফার কোড"
                 value={refCode}
                 onChange={(e) => setRefCode(e.target.value)}
                 icon={<UserPlus className="w-4 h-4 text-cyan-400" />}
                 required
               />
-              <p className="mt-1 text-xs text-cyan-400/80 font-medium pl-1">
+              <p className="mt-1 text-xs text-cyan-400/90 font-medium pl-1">
                 {language === 'bn'
-                  ? '* রেজিস্ট্রেশনের জন্য রেফারাল কোড থাকা আবশ্যক।'
-                  : '* Referral code is mandatory for registration.'}
+                  ? '* প্রথম অ্যাকাউন্ট খুলতে অ্যাডমিন রেফার কোড: ADMIN ব্যবহার করুন।'
+                  : '* For first account registration, use Admin Referral Code: ADMIN.'}
               </p>
             </div>
           )}

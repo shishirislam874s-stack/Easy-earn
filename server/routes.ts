@@ -144,16 +144,41 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       }
 
       const cleanRef = refCode.trim();
-      const found = schema.users.find(
-        (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
-      );
+      const cleanRefLower = cleanRef.toLowerCase();
 
-      if (!found) {
-        throw new Error('ভুল রেফারাল কোড! সঠিক রেফারাল কোড প্রদান করুন / Invalid referral code. Please enter a valid referral code');
+      // Check if admin master referral code
+      const isAdminMasterRef =
+        cleanRefLower === 'admin' ||
+        cleanRefLower === 'slshishir' ||
+        cleanRefLower === 'earnadmin' ||
+        cleanRefLower === 'earn1000';
+
+      let referrerId: string | null = null;
+      let referrerUser: User | null = null;
+
+      if (isAdminMasterRef) {
+        // Admin master referral code is ALWAYS valid
+        const adminUserInDb = schema.users.find(
+          (u) => u.referralCode.toLowerCase() === 'admin' || u.referralCode.toLowerCase() === 'earn1001'
+        );
+        if (adminUserInDb) {
+          referrerId = adminUserInDb.id;
+          referrerUser = adminUserInDb;
+        } else {
+          referrerId = 'ADMIN';
+        }
+      } else {
+        const found = schema.users.find(
+          (u) => u.referralCode.toLowerCase() === cleanRefLower || u.id === cleanRef
+        );
+
+        if (!found) {
+          throw new Error('ভুল রেফারাল কোড! সঠিক রেফারাল কোড প্রদান করুন (এডমিন রেফার কোড: ADMIN) / Invalid referral code. (Admin code: ADMIN)');
+        }
+
+        referrerId = found.id;
+        referrerUser = found;
       }
-
-      const referrerId: string = found.id;
-      const referrerUser: User = found;
 
       const newId = String(schema.users.length + 1001);
       const referralCode = `EARN${newId}`;
@@ -349,10 +374,14 @@ router.get('/auth/me', requireUser, (req: AuthenticatedRequest, res: Response) =
 
 // Lookup referral name (for showing toast "Referred by: X")
 router.get('/referral/lookup/:code', (req: Request, res: Response) => {
-  const code = (req.params.code || '').trim();
+  const code = (req.params.code || '').trim().toLowerCase();
+  if (code === 'admin' || code === 'slshishir' || code === 'earnadmin' || code === 'earn1000') {
+    return res.json({ found: true, name: 'Admin (Official)', code: 'ADMIN' });
+  }
+
   const snapshot = db.getSnapshot();
   const found = snapshot.users.find(
-    (u) => u.referralCode.toLowerCase() === code.toLowerCase() || u.id === code
+    (u) => u.referralCode.toLowerCase() === code || u.id === code
   );
   if (found) {
     return res.json({ found: true, name: found.name, code: found.referralCode });
