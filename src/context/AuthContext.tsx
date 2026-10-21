@@ -45,7 +45,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [user, setUserState] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('earn_saved_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setUser = (u: UserProfile | null) => {
+    setUserState(u);
+    try {
+      if (u) {
+        localStorage.setItem('earn_saved_user', JSON.stringify(u));
+      } else {
+        localStorage.removeItem('earn_saved_user');
+      }
+    } catch {}
+  };
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');

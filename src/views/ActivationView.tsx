@@ -3,10 +3,10 @@ import { ShieldCheck, Copy, Check, Clock, Sparkles, Send, AlertCircle, ArrowUpRi
 import { useAuth } from '../context/AuthContext';
 import { CategoryType } from '../types';
 import { LiquidCard, LiquidButton, LiquidInput } from '../components/LiquidGlass';
-import { authFetch } from '../lib/api';
+import { authFetch, safeJson } from '../lib/api';
 
 export function ActivationView() {
-  const { user, config, refreshUserData, refreshConfig, showToast, language, t } = useAuth();
+  const { user, config, refreshUserData, refreshConfig, showToast, language, t, logout } = useAuth();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('A');
   const [selectedMethod, setSelectedMethod] = useState<'bKash' | 'Nagad' | 'Rocket'>('bKash');
@@ -52,12 +52,23 @@ export function ActivationView() {
           category: selectedCategory,
           paymentMethod: selectedMethod,
           transactionId: transactionId.trim(),
+          userId: user?.id,
+          userName: user?.name,
+          userPhone: user?.phone,
         }),
       });
 
-      const data = await res.json();
+      const data = await safeJson(res, 'আবেদন সম্পন্ন করা যায়নি');
       if (!res.ok) {
-        setError(data.error || 'Activation request failed');
+        if (res.status === 401 || (data.error && data.error.includes('Unauthorized'))) {
+          setError(
+            language === 'bn'
+              ? 'লগইন সেশন পাওয়া যায়নি বা মেয়াদ শেষ হয়েছে। অনুগ্রহ করে আবার লগইন করুন।'
+              : 'Unauthorized. Please login again to submit your transaction.'
+          );
+        } else {
+          setError(data.error || 'Activation request failed');
+        }
       } else {
         setSuccessNotice(true);
         setTransactionId('');
@@ -291,8 +302,21 @@ export function ActivationView() {
         </h3>
 
         {error && (
-          <div className="mb-4 p-3 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-200 text-xs">
-            {error}
+          <div className="mb-4 p-3.5 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex flex-col gap-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span className="font-medium leading-relaxed">{error}</span>
+            </div>
+            {(error.includes('লগইন') || error.includes('login') || error.includes('Unauthorized')) && (
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="self-start mt-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-[11px] border border-white/20 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <span>{language === 'bn' ? 'লগইন পেজে যান' : 'Go to Login'}</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 

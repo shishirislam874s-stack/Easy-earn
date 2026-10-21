@@ -1,5 +1,40 @@
 {
-  "users": [],
+  "users": [
+    {
+      "id": "1001",
+      "name": "Admin (slshishir)",
+      "phone": "01604606880",
+      "passwordHash": "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
+      "category": "C",
+      "isActive": true,
+      "isBlocked": false,
+      "balance": 10000,
+      "referredBy": null,
+      "referralCode": "ADMIN",
+      "workUntil": null,
+      "isTeamLeader": true,
+      "activatedAt": "2026-10-15T09:31:42.801Z",
+      "createdAt": "2026-10-15T09:31:42.801Z",
+      "updatedAt": "2026-10-15T09:31:42.801Z"
+    },
+    {
+      "id": "1002",
+      "name": "Shishir",
+      "phone": "01621794375",
+      "passwordHash": "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
+      "category": null,
+      "isActive": false,
+      "isBlocked": false,
+      "balance": 0,
+      "referredBy": "1001",
+      "referralCode": "EARN1002",
+      "workUntil": null,
+      "isTeamLeader": false,
+      "activatedAt": null,
+      "createdAt": "2026-10-21T06:00:00.000Z",
+      "updatedAt": "2026-10-21T06:00:00.000Z"
+    }
+  ],
   "videos": [
     {
       "id": "vid-1",

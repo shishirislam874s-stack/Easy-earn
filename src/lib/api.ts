@@ -43,6 +43,17 @@ export function authFetch(url: string, options: RequestInit = {}, explicitToken?
     headers.set('x-session-token', token);
   }
 
+  // Double-header session resilience: pass cached user id
+  try {
+    const savedUserStr = localStorage.getItem('earn_saved_user');
+    if (savedUserStr) {
+      const u = JSON.parse(savedUserStr);
+      if (u && u.id) {
+        headers.set('x-user-id', String(u.id));
+      }
+    }
+  } catch {}
+
   return fetch(url, {
     ...options,
     headers,

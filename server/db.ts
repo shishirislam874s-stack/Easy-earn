@@ -211,6 +211,33 @@ class DatabaseManager {
     }
   }
 
+  public ensureUserExists(partial: { id: string; phone?: string; name?: string }): User {
+    const existing = this.data.users.find((u) => u.id === partial.id);
+    if (existing) return existing;
+
+    const nowIso = new Date().toISOString();
+    const newUser: User = {
+      id: partial.id,
+      name: partial.name || 'User',
+      phone: partial.phone || '',
+      passwordHash: '',
+      category: null,
+      isActive: false,
+      isBlocked: false,
+      balance: 0,
+      referredBy: 'ADMIN',
+      referralCode: `EARN${partial.id}`,
+      workUntil: null,
+      isTeamLeader: false,
+      activatedAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    this.data.users.push(newUser);
+    this.saveData(this.data);
+    return newUser;
+  }
+
   public getSnapshot(): DatabaseSchema {
     return this.data;
   }
