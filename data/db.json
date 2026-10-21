@@ -1,0 +1,128 @@
+{
+  "users": [
+    {
+      "id": "1001",
+      "name": "Shishir",
+      "phone": "01621794375",
+      "passwordHash": "$2b$10$JrS.kqgzrVhWVBHhNRdX3ObU2hKjo9QUjtl5wCFhAmxZTSTreweZi",
+      "category": null,
+      "isActive": false,
+      "isBlocked": false,
+      "balance": 0,
+      "referredBy": null,
+      "referralCode": "EARN1001",
+      "workUntil": null,
+      "isTeamLeader": false,
+      "activatedAt": null,
+      "createdAt": "2026-10-15T09:33:28.212Z",
+      "updatedAt": "2026-10-15T09:33:28.212Z"
+    }
+  ],
+  "videos": [
+    {
+      "id": "vid-1",
+      "title": "Earn App Platform Overview & Guidelines",
+      "titleBn": "আর্ন অ্যাপ পরিচিতি এবং কাজের নিয়মাবলী",
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "reward": 10,
+      "categoryRequired": "ALL",
+      "createdAt": "2026-10-15T09:31:42.801Z",
+      "isActive": true
+    },
+    {
+      "id": "vid-2",
+      "title": "Digital Bangladesh Freelance Income Strategies",
+      "titleBn": "ডিজিটাল বাংলাদেশ ফ্রিল্যান্সিং আয় কৌশল",
+      "url": "https://www.youtube.com/watch?v=kJQP7kiw5Fk",
+      "reward": 15,
+      "categoryRequired": "ALL",
+      "createdAt": "2026-10-15T09:31:42.801Z",
+      "isActive": true
+    },
+    {
+      "id": "vid-3",
+      "title": "Mobile Banking & Transaction Security In BD",
+      "titleBn": "মোবাইল ব্যাংকিং লেনদেনের নিরাপত্তা টিপস",
+      "url": "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",
+      "reward": 20,
+      "categoryRequired": "ALL",
+      "createdAt": "2026-10-15T09:31:42.801Z",
+      "isActive": true
+    },
+    {
+      "id": "vid-4",
+      "title": "Smart E-Commerce Product Research BD",
+      "titleBn": "স্মার্ট ই-কমার্স বিজনেস গবেষণা পদ্ধতি",
+      "url": "https://www.youtube.com/watch?v=3JZ_D3ELwOQ",
+      "reward": 25,
+      "categoryRequired": "ALL",
+      "createdAt": "2026-10-15T09:31:42.801Z",
+      "isActive": true
+    }
+  ],
+  "watchSessions": [],
+  "videoSubmissions": [],
+  "dailyEarnings": [],
+  "activationRequests": [],
+  "withdrawRequests": [],
+  "teamBonuses": [],
+  "history": [],
+  "notifications": [
+    {
+      "id": "notif-1792057424292-58gj",
+      "userId": "1002",
+      "titleEn": "Welcome to Earn App!",
+      "titleBn": "আর্ন অ্যাপে আপনাকে স্বাগতম!",
+      "messageEn": "Please activate your ID from the Category menu to start earning.",
+      "messageBn": "কাজ শুরু করতে অনুগ্রহ করে ক্যাটাগরি মেনু থেকে আইডি এক্টিভ করুন।",
+      "type": "activation",
+      "isRead": false,
+      "createdAt": "2026-10-15T09:43:44.292Z"
+    },
+    {
+      "id": "notif-1792056808212-uscl",
+      "userId": "1001",
+      "titleEn": "Welcome to Earn App!",
+      "titleBn": "আর্ন অ্যাপে আপনাকে স্বাগতম!",
+      "messageEn": "Please activate your ID from the Category menu to start earning.",
+      "messageBn": "কাজ শুরু করতে অনুগ্রহ করে ক্যাটাগরি মেনু থেকে আইডি এক্টিভ করুন।",
+      "type": "activation",
+      "isRead": false,
+      "createdAt": "2026-10-15T09:33:28.212Z"
+    }
+  ],
+  "settings": {
+    "payment_number_bkash": "01604606880",
+    "payment_number_nagad": "01604606880",
+    "payment_number_rocket": "01604606880",
+    "fee_category_a": 500,
+    "fee_category_b": 1000,
+    "fee_category_c": 1500,
+    "limit_category_a": 50,
+    "limit_category_b": 100,
+    "limit_category_c": 150,
+    "min_withdraw": 200,
+    "ref_join": 1,
+    "ref_active": 100,
+    "work_days": 5,
+    "w1_days": 2,
+    "w2_days": 3,
+    "w3_days": 4,
+    "team_size": 20,
+    "t1_bonus": 10,
+    "t2_bonus": 20,
+    "t3_bonus": 30,
+    "watch_seconds": 15
+  },
+  "broadcasts": [
+    {
+      "id": "bc-1",
+      "titleEn": "Welcome to Earn App 2026 Edition",
+      "titleBn": "আর্ন অ্যাপে স্বাগতম! নিয়ম মেনে কাজ করুন ও দ্রুত উইথড্র নিন",
+      "messageEn": "All withdrawals and tasks are approved daily. Stay on video for 15s to get reward.",
+      "messageBn": "সকল ভিডিও কাজে ১৫ সেকেন্ড থাকতে হবে। রেফার করে টিম লিডার হয়ে অতিরিক্ত বোনাস পান।",
+      "isActive": true,
+      "createdAt": "2026-10-15T09:31:42.801Z"
+    }
+  ]
+}

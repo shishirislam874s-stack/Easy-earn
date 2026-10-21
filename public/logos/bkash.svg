@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <defs>
+    <linearGradient id="bkash-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2136E" />
+      <stop offset="100%" stop-color="#A8074E" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="60" rx="14" fill="url(#bkash-grad)" />
+  <!-- bKash bird shape origami mark -->
+  <g transform="translate(18, 12)">
+    <polygon points="18,3 32,25 21,21 16,33 13,22 2,24" fill="#ffffff" />
+    <polygon points="18,3 21,21 13,22" fill="#FFE5F0" />
+    <polygon points="32,25 21,21 27,33" fill="#F8B4D4" />
+  </g>
+  <!-- bKash text -->
+  <text x="62" y="38" font-family="'Plus Jakarta Sans', sans-serif" font-size="22" font-weight="800" fill="#ffffff" letter-spacing="-0.5">bKash</text>
+  <text x="135" y="38" font-family="'Hind Siliguri', sans-serif" font-size="18" font-weight="700" fill="#FFE5F0">বিকাশ</text>
+</svg>

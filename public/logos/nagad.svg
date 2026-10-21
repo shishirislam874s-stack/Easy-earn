@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <defs>
+    <linearGradient id="nagad-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F7931E" />
+      <stop offset="50%" stop-color="#ED1C24" />
+      <stop offset="100%" stop-color="#B31217" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="60" rx="14" fill="url(#nagad-grad)" />
+  <!-- Nagad flame/circle motif -->
+  <g transform="translate(18, 11)">
+    <circle cx="18" cy="19" r="15" fill="#FFEACC" />
+    <path d="M18 4 C24 10, 26 17, 24 23 C22 28, 16 32, 12 28 C8 24, 9 17, 13 13 C15 11, 16 7, 18 4 Z" fill="#ED1C24" />
+    <path d="M19 12 C23 16, 23 21, 20 24 C17 27, 14 26, 15 22 C16 19, 18 15, 19 12 Z" fill="#FBB03B" />
+  </g>
+  <!-- Nagad text -->
+  <text x="64" y="38" font-family="'Plus Jakarta Sans', sans-serif" font-size="22" font-weight="800" fill="#ffffff" letter-spacing="-0.5">Nagad</text>
+  <text x="138" y="38" font-family="'Hind Siliguri', sans-serif" font-size="18" font-weight="700" fill="#FFF2DE">নগদ</text>
+</svg>

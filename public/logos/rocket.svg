@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <defs>
+    <linearGradient id="rocket-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8E2DE2" />
+      <stop offset="100%" stop-color="#4A00E0" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="60" rx="14" fill="url(#rocket-grad)" />
+  <!-- Rocket Icon -->
+  <g transform="translate(18, 12)">
+    <path d="M19 2 C13 7, 10 16, 12 25 L5 29 L9 33 L16 31 C21 34, 27 30, 29 23 C31 15, 26 5, 19 2 Z" fill="#ffffff" />
+    <circle cx="19" cy="14" r="3.5" fill="#4A00E0" />
+    <path d="M7 32 L2 35 L5 30 Z" fill="#FFC72C" />
+  </g>
+  <!-- Rocket text -->
+  <text x="64" y="38" font-family="'Plus Jakarta Sans', sans-serif" font-size="22" font-weight="800" fill="#ffffff" letter-spacing="-0.5">Rocket</text>
+  <text x="140" y="38" font-family="'Hind Siliguri', sans-serif" font-size="18" font-weight="700" fill="#EADAFF">রকেট</text>
+</svg>

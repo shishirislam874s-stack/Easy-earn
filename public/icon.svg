@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b111e" />
+      <stop offset="50%" stop-color="#07090e" />
+      <stop offset="100%" stop-color="#020408" />
+    </linearGradient>
+    <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="50%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="url(#coinGrad)" stroke-width="6" stroke-opacity="0.4" />
+
+  <!-- Outer Ambient Glow Ring -->
+  <circle cx="256" cy="256" r="170" fill="none" stroke="url(#coinGrad)" stroke-width="4" stroke-opacity="0.3" filter="url(#glow)" />
+
+  <!-- Inner Badge / Coin -->
+  <circle cx="256" cy="256" r="140" fill="#0f172a" stroke="url(#coinGrad)" stroke-width="10" />
+  <circle cx="256" cy="256" r="126" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="8 6" stroke-opacity="0.6" />
+
+  <!-- Stylized Taka (৳) / Earn Symbol -->
+  <g fill="none" stroke="url(#goldGrad)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Stylized Bengali Taka ৳ character crafted with geometric precision -->
+    <path d="M 230 170 Q 210 170 200 190 Q 190 215 210 235 Q 230 255 256 255 L 290 255 Q 315 255 315 285 Q 315 325 270 335 L 235 342" stroke-width="22" />
+    <!-- Taka diagonal slash / vertical stem -->
+    <path d="M 268 155 L 268 360" stroke-width="20" stroke="url(#coinGrad)" />
+    <!-- Top accent dot/circle -->
+    <circle cx="230" cy="190" r="12" fill="url(#goldGrad)" stroke="none" />
+  </g>
+
+  <!-- Sparkles / Micro-stars -->
+  <path d="M 360 160 L 366 175 L 381 181 L 366 187 L 360 202 L 354 187 L 339 181 L 354 175 Z" fill="#38bdf8" />
+  <path d="M 145 320 L 149 332 L 161 336 L 149 340 L 145 352 L 141 340 L 129 336 L 141 332 Z" fill="#34d399" />
+</svg>
