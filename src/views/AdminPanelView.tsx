@@ -26,6 +26,7 @@ import {
   ArrowDownLeft,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { adminFetch } from '../lib/api';
 import { LiquidCard, LiquidButton, LiquidInput } from '../components/LiquidGlass';
 
 export function AdminPanelView() {
@@ -102,7 +103,7 @@ export function AdminPanelView() {
   // Fetch admin overview stats
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/admin/stats');
+      const res = await adminFetch('/api/admin/stats');
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -129,7 +130,7 @@ export function AdminPanelView() {
         limit: '20',
       });
 
-      const res = await fetch(`/api/admin/requests?${params.toString()}`);
+      const res = await adminFetch(`/api/admin/requests?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         if (append) {
@@ -151,7 +152,7 @@ export function AdminPanelView() {
   // Fetch other tabs data
   const fetchVideos = async () => {
     try {
-      const res = await fetch('/api/admin/videos');
+      const res = await adminFetch('/api/admin/videos');
       if (res.ok) {
         const data = await res.json();
         setVideosList(data.videos || []);
@@ -161,7 +162,7 @@ export function AdminPanelView() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/admin/settings');
+      const res = await adminFetch('/api/admin/settings');
       if (res.ok) {
         const data = await res.json();
         setSystemSettings(data.settings);
@@ -172,7 +173,7 @@ export function AdminPanelView() {
   const fetchUsers = async () => {
     try {
       const params = new URLSearchParams({ search: userSearch, page: '1', limit: '50' });
-      const res = await fetch(`/api/admin/users?${params.toString()}`);
+      const res = await adminFetch(`/api/admin/users?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setUsersList(data.users || []);
@@ -182,7 +183,7 @@ export function AdminPanelView() {
 
   const fetchTeamLeaders = async () => {
     try {
-      const res = await fetch('/api/admin/team-leaders');
+      const res = await adminFetch('/api/admin/team-leaders');
       if (res.ok) {
         const data = await res.json();
         setTeamLeadersData(data);
@@ -192,7 +193,7 @@ export function AdminPanelView() {
 
   const fetchBroadcasts = async () => {
     try {
-      const res = await fetch('/api/admin/broadcasts');
+      const res = await adminFetch('/api/admin/broadcasts');
       if (res.ok) {
         const data = await res.json();
         setBroadcastsList(data.broadcasts || []);
@@ -226,7 +227,7 @@ export function AdminPanelView() {
   // Actions for requests
   const handleApproveActivation = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/activation/${id}/approve`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/activation/${id}/approve`, { method: 'POST' });
       if (res.ok) {
         showToast(language === 'bn' ? 'অ্যাক্টিভেশন অনুমোদন সফল!' : 'Activation approved!');
         // Remove from list if in pending view
@@ -242,7 +243,7 @@ export function AdminPanelView() {
 
   const handleApproveVideo = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/video/${id}/approve`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/video/${id}/approve`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
         showToast(language === 'bn' ? 'ভিডিও কাজ অনুমোদন সফল!' : 'Video approved!');
@@ -258,7 +259,7 @@ export function AdminPanelView() {
 
   const handlePayWithdraw = async (id: string) => {
     try {
-      const res = await fetch(`/api/admin/withdraw/${id}/pay`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/withdraw/${id}/pay`, { method: 'POST' });
       if (res.ok) {
         showToast(language === 'bn' ? 'উইথড্র পেইড মার্ক করা হয়েছে!' : 'Withdrawal marked paid!');
         if (statusFilter === 'pending') {
@@ -281,7 +282,7 @@ export function AdminPanelView() {
       else if (type === 'video') endpoint = `/api/admin/video/${id}/reject`;
       else if (type === 'withdraw') endpoint = `/api/admin/withdraw/${id}/reject`;
 
-      const res = await fetch(endpoint, {
+      const res = await adminFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: rejectReason }),
@@ -306,7 +307,7 @@ export function AdminPanelView() {
     e.preventDefault();
     try {
       if (editingVideo) {
-        const res = await fetch(`/api/admin/videos/${editingVideo.id}`, {
+        const res = await adminFetch(`/api/admin/videos/${editingVideo.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -323,7 +324,7 @@ export function AdminPanelView() {
           setEditingVideo(null);
         }
       } else {
-        const res = await fetch('/api/admin/videos', {
+        const res = await adminFetch('/api/admin/videos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -348,7 +349,7 @@ export function AdminPanelView() {
   const handleDeleteVideo = async (id: string) => {
     if (!confirm('Are you sure you want to delete this video?')) return;
     try {
-      await fetch(`/api/admin/videos/${id}`, { method: 'DELETE' });
+      await adminFetch(`/api/admin/videos/${id}`, { method: 'DELETE' });
       showToast('Video deleted');
       fetchVideos();
     } catch {}
@@ -359,7 +360,7 @@ export function AdminPanelView() {
     e.preventDefault();
     setIsSavingSettings(true);
     try {
-      const res = await fetch('/api/admin/settings', {
+      const res = await adminFetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(systemSettings),
@@ -376,7 +377,7 @@ export function AdminPanelView() {
   const handleSaveUserBalance = async () => {
     if (!balanceModalUser || !balanceAmount) return;
     try {
-      const res = await fetch(`/api/admin/users/${balanceModalUser.id}/balance`, {
+      const res = await adminFetch(`/api/admin/users/${balanceModalUser.id}/balance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -400,7 +401,7 @@ export function AdminPanelView() {
 
   const handleToggleBlock = async (userId: string) => {
     try {
-      const res = await fetch(`/api/admin/users/${userId}/block`, { method: 'POST' });
+      const res = await adminFetch(`/api/admin/users/${userId}/block`, { method: 'POST' });
       if (res.ok) {
         showToast('User status updated');
         fetchUsers();
@@ -410,7 +411,7 @@ export function AdminPanelView() {
 
   const handleViewUserHistory = async (u: any) => {
     try {
-      const res = await fetch(`/api/admin/users/${u.id}/history`);
+      const res = await adminFetch(`/api/admin/users/${u.id}/history`);
       if (res.ok) {
         const json = await res.json();
         setUserHistoryModal({ user: u, history: json.history || [] });
@@ -422,7 +423,7 @@ export function AdminPanelView() {
   const handleCreateBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/broadcasts', {
+      const res = await adminFetch('/api/admin/broadcasts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -444,13 +445,46 @@ export function AdminPanelView() {
   };
 
   const handleDeleteBroadcast = async (id: string) => {
-    await fetch(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
+    await adminFetch(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
     showToast('Deleted');
     fetchBroadcasts();
   };
 
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const activeUrlRef = urlParams?.get('ref');
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      {/* Referral Link Notice Banner when Admin is Logged In */}
+      {activeUrlRef && (
+        <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-amber-500/10">
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-bold text-amber-300">
+                {language === 'bn'
+                  ? `আপনি বর্তমানে অ্যাডমিন হিসেবে লগইন আছেন (রেফার লিংক: ${activeUrlRef})`
+                  : `You are currently logged in as Admin (Ref link: ${activeUrlRef})`}
+              </p>
+              <p className="text-amber-200/80 text-xs mt-0.5">
+                {language === 'bn'
+                  ? 'রেফারাল লিংক দিয়ে নতুন ইউজার অ্যাকাউন্ট তৈরি করতে চাইলে লগআউট বাটনে চাপ দিন অথবা অন্য ব্রাউজারে লিংকটি খুলুন।'
+                  : 'To register a new user account with this referral link, please logout or open this link in an incognito window.'}
+              </p>
+            </div>
+          </div>
+          <LiquidButton
+            variant="danger"
+            size="sm"
+            onClick={adminLogout}
+            className="shrink-0"
+          >
+            <LogOut className="w-4 h-4 mr-1" />
+            <span>{language === 'bn' ? 'লগআউট করে রেজিস্টার করুন' : 'Logout & Register'}</span>
+          </LiquidButton>
+        </div>
+      )}
+
       {/* Top Header & Overview Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
