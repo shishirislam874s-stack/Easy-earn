@@ -12,7 +12,15 @@ interface LoginViewProps {
 export function LoginView({ onGoToAdminLogin, onLoginSuccess }: LoginViewProps) {
   const { login, register, referredByName, language, t } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('ref') || window.location.hash === '#register') {
+        return 'register';
+      }
+    }
+    return 'login';
+  });
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -21,9 +29,14 @@ export function LoginView({ onGoToAdminLogin, onLoginSuccess }: LoginViewProps) 
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const savedRef = localStorage.getItem('earn_ref_code');
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlRef = urlParams.get('ref');
+    const savedRef = urlRef || localStorage.getItem('earn_ref_code');
     if (savedRef) {
-      setRefCode(savedRef);
+      setRefCode(savedRef.trim());
+    }
+    if (urlRef || window.location.hash === '#register') {
+      setMode('register');
     }
   }, []);
 
@@ -42,7 +55,18 @@ export function LoginView({ onGoToAdminLogin, onLoginSuccess }: LoginViewProps) 
           onLoginSuccess();
         }
       } else {
-        const res = await register(name, cleanPhone, password, refCode);
+        const finalRef = refCode.trim();
+        if (!finalRef) {
+          setError(
+            t.referralRequiredError ||
+              (language === 'bn'
+                ? 'রেজিস্ট্রেশনের জন্য রেফারাল কোড দেওয়া বাধ্যতামূলক।'
+                : 'Referral code is required for registration.')
+          );
+          setIsLoading(false);
+          return;
+        }
+        const res = await register(name, cleanPhone, password, finalRef);
         if (!res.success) {
           setError(res.error || 'Registration failed');
         } else {
@@ -142,13 +166,21 @@ export function LoginView({ onGoToAdminLogin, onLoginSuccess }: LoginViewProps) 
           />
 
           {mode === 'register' && (
-            <LiquidInput
-              label={t.referralCodeOptional}
-              placeholder="EARN1001"
-              value={refCode}
-              onChange={(e) => setRefCode(e.target.value)}
-              icon={<UserPlus className="w-4 h-4" />}
-            />
+            <div>
+              <LiquidInput
+                label={t.referralCodeRequired || t.referralCodeOptional}
+                placeholder="EARN1001"
+                value={refCode}
+                onChange={(e) => setRefCode(e.target.value)}
+                icon={<UserPlus className="w-4 h-4 text-cyan-400" />}
+                required
+              />
+              <p className="mt-1 text-xs text-cyan-400/80 font-medium pl-1">
+                {language === 'bn'
+                  ? '* রেজিস্ট্রেশনের জন্য রেফারাল কোড থাকা আবশ্যক।'
+                  : '* Referral code is mandatory for registration.'}
+              </p>
+            </div>
           )}
 
           <div className="pt-2">

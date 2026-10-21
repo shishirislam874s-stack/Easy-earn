@@ -138,20 +138,22 @@ router.post('/auth/register', async (req: Request, res: Response) => {
         throw new Error('This phone number is already registered / এই ফোন নম্বর দিয়ে আগেই অ্যাকাউন্ট খোলা হয়েছে');
       }
 
-      // Check referral code
-      let referrerId: string | null = null;
-      let referrerUser: User | null = null;
-
-      if (refCode && typeof refCode === 'string' && refCode.trim().length > 0) {
-        const cleanRef = refCode.trim();
-        const found = schema.users.find(
-          (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
-        );
-        if (found) {
-          referrerId = found.id;
-          referrerUser = found;
-        }
+      // Enforce mandatory referral code
+      if (!refCode || typeof refCode !== 'string' || !refCode.trim()) {
+        throw new Error('রেজিস্ট্রেশনের জন্য রেফারাল কোড দেওয়া বাধ্যতামূলক / Referral code is required to register');
       }
+
+      const cleanRef = refCode.trim();
+      const found = schema.users.find(
+        (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
+      );
+
+      if (!found) {
+        throw new Error('ভুল রেফারাল কোড! সঠিক রেফারাল কোড প্রদান করুন / Invalid referral code. Please enter a valid referral code');
+      }
+
+      const referrerId: string = found.id;
+      const referrerUser: User = found;
 
       const newId = String(schema.users.length + 1001);
       const referralCode = `EARN${newId}`;

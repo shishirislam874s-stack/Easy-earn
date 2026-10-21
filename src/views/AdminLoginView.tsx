@@ -67,7 +67,7 @@ export function AdminLoginView({ onBackToUser, onLoginSuccess }: AdminLoginViewP
         <form onSubmit={handleSubmit} className="space-y-4">
           <LiquidInput
             label={t.adminUsername}
-            placeholder="admin"
+            placeholder="slshishir"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             icon={<User className="w-4 h-4" />}

@@ -4,8 +4,8 @@ import { Request, Response, NextFunction } from 'express';
 import { db } from './db';
 import { User } from './types';
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin12345';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'slshishir';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '#FFHUDT6O3jojE8uJPo7eO';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'earn_app_default_session_secret_2026_xyz';
 
 import fs from 'fs';

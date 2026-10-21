@@ -82,39 +82,6 @@ var db_default = {
   history: [],
   notifications: [
     {
-      id: "notif-1792550223226-5qxy",
-      userId: "1002",
-      titleEn: "Welcome to Earn App!",
-      titleBn: "\u0986\u09B0\u09CD\u09A8 \u0985\u09CD\u09AF\u09BE\u09AA\u09C7 \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09B8\u09CD\u09AC\u09BE\u0997\u09A4\u09AE!",
-      messageEn: "Please activate your ID from the Category menu to start earning.",
-      messageBn: "\u0995\u09BE\u099C \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF \u09AE\u09C7\u09A8\u09C1 \u09A5\u09C7\u0995\u09C7 \u0986\u0987\u09A1\u09BF \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C1\u09A8\u0964",
-      type: "activation",
-      isRead: false,
-      createdAt: "2026-10-21T02:37:03.226Z"
-    },
-    {
-      id: "notif-1792549091238-mxb0",
-      userId: "1002",
-      titleEn: "Welcome to Earn App!",
-      titleBn: "\u0986\u09B0\u09CD\u09A8 \u0985\u09CD\u09AF\u09BE\u09AA\u09C7 \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09B8\u09CD\u09AC\u09BE\u0997\u09A4\u09AE!",
-      messageEn: "Please activate your ID from the Category menu to start earning.",
-      messageBn: "\u0995\u09BE\u099C \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF \u09AE\u09C7\u09A8\u09C1 \u09A5\u09C7\u0995\u09C7 \u0986\u0987\u09A1\u09BF \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C1\u09A8\u0964",
-      type: "activation",
-      isRead: false,
-      createdAt: "2026-10-21T02:18:11.238Z"
-    },
-    {
-      id: "notif-1792057424292-58gj",
-      userId: "1002",
-      titleEn: "Welcome to Earn App!",
-      titleBn: "\u0986\u09B0\u09CD\u09A8 \u0985\u09CD\u09AF\u09BE\u09AA\u09C7 \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09B8\u09CD\u09AC\u09BE\u0997\u09A4\u09AE!",
-      messageEn: "Please activate your ID from the Category menu to start earning.",
-      messageBn: "\u0995\u09BE\u099C \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF \u09AE\u09C7\u09A8\u09C1 \u09A5\u09C7\u0995\u09C7 \u0986\u0987\u09A1\u09BF \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C1\u09A8\u0964",
-      type: "activation",
-      isRead: false,
-      createdAt: "2026-10-15T09:43:44.292Z"
-    },
-    {
       id: "notif-1792056808212-uscl",
       userId: "1001",
       titleEn: "Welcome to Earn App!",
@@ -331,8 +298,8 @@ var db = new DatabaseManager();
 import crypto from "crypto";
 import fs2 from "fs";
 import path2 from "path";
-var ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin12345";
+var ADMIN_USERNAME = process.env.ADMIN_USERNAME || "slshishir";
+var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "#FFHUDT6O3jojE8uJPo7eO";
 var SESSION_SECRET = process.env.SESSION_SECRET || "earn_app_default_session_secret_2026_xyz";
 var adminFailedAttempts = /* @__PURE__ */ new Map();
 function checkAdminRateLimit(ip) {
@@ -661,18 +628,18 @@ router.post("/auth/register", async (req, res) => {
       if (existing) {
         throw new Error("This phone number is already registered / \u098F\u0987 \u09AB\u09CB\u09A8 \u09A8\u09AE\u09CD\u09AC\u09B0 \u09A6\u09BF\u09DF\u09C7 \u0986\u0997\u09C7\u0987 \u0985\u09CD\u09AF\u09BE\u0995\u09BE\u0989\u09A8\u09CD\u099F \u0996\u09CB\u09B2\u09BE \u09B9\u09DF\u09C7\u099B\u09C7");
       }
-      let referrerId = null;
-      let referrerUser = null;
-      if (refCode && typeof refCode === "string" && refCode.trim().length > 0) {
-        const cleanRef = refCode.trim();
-        const found = schema.users.find(
-          (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
-        );
-        if (found) {
-          referrerId = found.id;
-          referrerUser = found;
-        }
+      if (!refCode || typeof refCode !== "string" || !refCode.trim()) {
+        throw new Error("\u09B0\u09C7\u099C\u09BF\u09B8\u09CD\u099F\u09CD\u09B0\u09C7\u09B6\u09A8\u09C7\u09B0 \u099C\u09A8\u09CD\u09AF \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1 \u09A6\u09C7\u0993\u09DF\u09BE \u09AC\u09BE\u09A7\u09CD\u09AF\u09A4\u09BE\u09AE\u09C2\u09B2\u0995 / Referral code is required to register");
       }
+      const cleanRef = refCode.trim();
+      const found = schema.users.find(
+        (u) => u.referralCode.toLowerCase() === cleanRef.toLowerCase() || u.id === cleanRef
+      );
+      if (!found) {
+        throw new Error("\u09AD\u09C1\u09B2 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1! \u09B8\u09A0\u09BF\u0995 \u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0995\u09CB\u09A1 \u09AA\u09CD\u09B0\u09A6\u09BE\u09A8 \u0995\u09B0\u09C1\u09A8 / Invalid referral code. Please enter a valid referral code");
+      }
+      const referrerId = found.id;
+      const referrerUser = found;
       const newId = String(schema.users.length + 1001);
       const referralCode = `EARN${newId}`;
       const passwordHash = bcrypt.hashSync(password, 10);
