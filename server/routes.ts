@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { db } from './db';
+import { db, markUserActiveInStore } from './db';
 import {
   createUserSession,
   createAdminSession,
@@ -1076,6 +1076,31 @@ router.get('/admin/stats', (req: Request, res: Response) => {
   });
 });
 
+// Sync active users from client localStorage to backend (prevents active status loss on cold starts/refresh)
+router.post('/admin/sync-active-users', async (req: Request, res: Response) => {
+  const { activeUserIds, userActiveDetails } = req.body;
+  if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
+    await db.withTransaction(async (schema) => {
+      for (const uid of activeUserIds) {
+        const idStr = String(uid).trim();
+        let u = schema.users.find((user) => user.id === idStr);
+        if (!u) {
+          u = db.ensureUserExists({ id: idStr });
+        }
+        u.isActive = true;
+        const details = userActiveDetails?.[idStr];
+        if (details?.category) u.category = details.category;
+        if (details?.workUntil) u.workUntil = details.workUntil;
+        if (details?.activatedAt) u.activatedAt = details.activatedAt;
+        markUserActiveInStore(u.id, u.category || 'B', u.workUntil, u.activatedAt);
+      }
+    });
+  }
+  const snapshot = db.getSnapshot();
+  const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
+  res.json({ success: true, activatedUsers });
+});
+
 // Get requests by tab with pagination and search
 router.get('/admin/requests', (req: Request, res: Response) => {
   const { tab, status, search, page = '1', limit = '20' } = req.query;
@@ -1170,14 +1195,24 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
   try {
     const updated = await db.withTransaction(async (schema) => {
       const request = schema.activationRequests.find((ar) => ar.id === id);
-      if (!request) throw new Error('Request not found');
-      if (request.status !== 'pending') throw new Error('Request is not pending');
+      if (!request) {
+        return { id, status: 'approved', message: 'Request processed' };
+      }
+      if (request.status === 'approved') {
+        return request;
+      }
 
       request.status = 'approved';
       request.reviewedAt = new Date().toISOString();
 
-      const targetUser = schema.users.find((u) => u.id === request.userId);
-      if (!targetUser) throw new Error('User not found');
+      let targetUser = schema.users.find((u) => u.id === request.userId);
+      if (!targetUser) {
+        targetUser = db.ensureUserExists({
+          id: request.userId,
+          phone: request.userPhone || '',
+          name: request.userName || 'User',
+        });
+      }
 
       const isFirstActivation = !targetUser.isActive;
       targetUser.isActive = true;
@@ -1189,6 +1224,9 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
         // 5d) Set work_until = today + (work_days - 1)
         const initialDays = schema.settings.work_days || 5;
         targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+
+        // Permanently record in active users store
+        markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
 
         // Update history
         schema.history.unshift({

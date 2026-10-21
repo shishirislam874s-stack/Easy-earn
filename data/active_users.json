@@ -1,0 +1,20 @@
+{
+  "activeUserIds": [
+    "1001",
+    "1002"
+  ],
+  "userActiveDetails": {
+    "1001": {
+      "isActive": true,
+      "category": "C",
+      "workUntil": "2030-12-31",
+      "activatedAt": "2026-10-15T09:31:42.801Z"
+    },
+    "1002": {
+      "isActive": true,
+      "category": "B",
+      "workUntil": "2026-10-30",
+      "activatedAt": "2026-10-21T07:25:17.622Z"
+    }
+  }
+}

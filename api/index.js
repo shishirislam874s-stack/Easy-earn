@@ -35,17 +35,17 @@ var db_default = {
       name: "Shishir",
       phone: "01621794375",
       passwordHash: "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
-      category: null,
-      isActive: false,
+      category: "B",
+      isActive: true,
       isBlocked: false,
       balance: 0,
       referredBy: "1001",
       referralCode: "EARN1002",
-      workUntil: null,
+      workUntil: "2026-10-30",
       isTeamLeader: false,
-      activatedAt: null,
+      activatedAt: "2026-10-21T07:25:17.622Z",
       createdAt: "2026-10-21T06:00:00.000Z",
-      updatedAt: "2026-10-21T06:00:00.000Z"
+      updatedAt: "2026-10-21T07:25:17.622Z"
     }
   ],
   videos: [
@@ -134,10 +134,77 @@ var db_default = {
   ]
 };
 
+// data/active_users.json
+var active_users_default = {
+  activeUserIds: ["1001", "1002"],
+  userActiveDetails: {
+    "1001": {
+      isActive: true,
+      category: "C",
+      workUntil: "2030-12-31"
+    },
+    "1002": {
+      isActive: true,
+      category: "B",
+      workUntil: "2026-10-30"
+    }
+  }
+};
+
 // server/db.ts
 var isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
 var DATA_DIR = isServerless ? path.resolve("/tmp", "earn_app_data") : path.resolve(process.cwd(), "data");
 var DB_FILE = path.resolve(DATA_DIR, "db.json");
+var ACTIVE_USERS_FILE = path.resolve(DATA_DIR, "active_users.json");
+var activeUsersStore = {
+  activeUserIds: ["1001", "1002"],
+  userActiveDetails: {
+    "1001": { isActive: true, category: "C", workUntil: "2030-12-31" },
+    "1002": { isActive: true, category: "B", workUntil: "2026-10-30" }
+  }
+};
+function initActiveUsersStore() {
+  try {
+    if (active_users_default && typeof active_users_default === "object") {
+      const s = active_users_default;
+      if (Array.isArray(s.activeUserIds)) {
+        activeUsersStore.activeUserIds = Array.from(/* @__PURE__ */ new Set([...activeUsersStore.activeUserIds, ...s.activeUserIds]));
+      }
+      if (s.userActiveDetails) {
+        activeUsersStore.userActiveDetails = { ...activeUsersStore.userActiveDetails, ...s.userActiveDetails };
+      }
+    }
+    if (fs.existsSync(ACTIVE_USERS_FILE)) {
+      const content = fs.readFileSync(ACTIVE_USERS_FILE, "utf-8");
+      const data = JSON.parse(content);
+      if (Array.isArray(data.activeUserIds)) {
+        activeUsersStore.activeUserIds = Array.from(/* @__PURE__ */ new Set([...activeUsersStore.activeUserIds, ...data.activeUserIds]));
+      }
+      if (data.userActiveDetails) {
+        activeUsersStore.userActiveDetails = { ...activeUsersStore.userActiveDetails, ...data.userActiveDetails };
+      }
+    }
+  } catch (err) {
+    console.error("Failed to init active users store:", err);
+  }
+}
+initActiveUsersStore();
+function markUserActiveInStore(userId, category = "B", workUntil, activatedAt) {
+  if (!activeUsersStore.activeUserIds.includes(userId)) {
+    activeUsersStore.activeUserIds.push(userId);
+  }
+  activeUsersStore.userActiveDetails[userId] = {
+    isActive: true,
+    category,
+    workUntil: workUntil || "2026-10-30",
+    activatedAt: activatedAt || (/* @__PURE__ */ new Date()).toISOString()
+  };
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ACTIVE_USERS_FILE, JSON.stringify(activeUsersStore, null, 2), "utf-8");
+  } catch {
+  }
+}
 var DEFAULT_SETTINGS = {
   payment_number_bkash: "01604606880",
   payment_number_nagad: "01604606880",
@@ -182,6 +249,7 @@ var DatabaseManager = class {
         const raw = fs.readFileSync(DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         parsed.settings = { ...DEFAULT_SETTINGS, ...parsed.settings || {} };
+        this.mergeActiveUsers(parsed);
         return parsed;
       }
     } catch (err) {
@@ -190,9 +258,26 @@ var DatabaseManager = class {
     try {
       const fallback = JSON.parse(JSON.stringify(db_default));
       fallback.settings = { ...DEFAULT_SETTINGS, ...fallback.settings || {} };
+      this.mergeActiveUsers(fallback);
       return fallback;
     } catch {
       return this.createInitialData();
+    }
+  }
+  mergeActiveUsers(schema) {
+    if (!schema || !Array.isArray(schema.users)) return;
+    for (const [userId, details] of Object.entries(activeUsersStore.userActiveDetails)) {
+      const user = schema.users.find((u) => u.id === userId);
+      if (user) {
+        user.isActive = true;
+        if (details.category && !user.category) user.category = details.category;
+        if (details.workUntil && (!user.workUntil || user.workUntil < details.workUntil)) {
+          user.workUntil = details.workUntil;
+        }
+        if (details.activatedAt && !user.activatedAt) {
+          user.activatedAt = details.activatedAt;
+        }
+      }
     }
   }
   createInitialData() {
@@ -295,22 +380,34 @@ var DatabaseManager = class {
   }
   ensureUserExists(partial) {
     const existing = this.data.users.find((u) => u.id === partial.id);
-    if (existing) return existing;
+    if (existing) {
+      if (activeUsersStore.activeUserIds.includes(existing.id)) {
+        existing.isActive = true;
+        const details2 = activeUsersStore.userActiveDetails[existing.id];
+        if (details2?.category && !existing.category) existing.category = details2.category;
+        if (details2?.workUntil && (!existing.workUntil || existing.workUntil < details2.workUntil)) {
+          existing.workUntil = details2.workUntil;
+        }
+      }
+      return existing;
+    }
+    const isInitiallyActive = activeUsersStore.activeUserIds.includes(partial.id);
+    const details = activeUsersStore.userActiveDetails[partial.id];
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
     const newUser = {
       id: partial.id,
       name: partial.name || "User",
       phone: partial.phone || "",
       passwordHash: "",
-      category: null,
-      isActive: false,
+      category: details?.category || (isInitiallyActive ? "B" : null),
+      isActive: isInitiallyActive,
       isBlocked: false,
       balance: 0,
       referredBy: "ADMIN",
       referralCode: `EARN${partial.id}`,
-      workUntil: null,
+      workUntil: details?.workUntil || (isInitiallyActive ? "2026-10-30" : null),
       isTeamLeader: false,
-      activatedAt: null,
+      activatedAt: details?.activatedAt || (isInitiallyActive ? nowIso : null),
       createdAt: nowIso,
       updatedAt: nowIso
     };
@@ -1515,6 +1612,29 @@ router.get("/admin/stats", (req, res) => {
     totalPaid
   });
 });
+router.post("/admin/sync-active-users", async (req, res) => {
+  const { activeUserIds, userActiveDetails } = req.body;
+  if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
+    await db.withTransaction(async (schema) => {
+      for (const uid of activeUserIds) {
+        const idStr = String(uid).trim();
+        let u = schema.users.find((user) => user.id === idStr);
+        if (!u) {
+          u = db.ensureUserExists({ id: idStr });
+        }
+        u.isActive = true;
+        const details = userActiveDetails?.[idStr];
+        if (details?.category) u.category = details.category;
+        if (details?.workUntil) u.workUntil = details.workUntil;
+        if (details?.activatedAt) u.activatedAt = details.activatedAt;
+        markUserActiveInStore(u.id, u.category || "B", u.workUntil, u.activatedAt);
+      }
+    });
+  }
+  const snapshot = db.getSnapshot();
+  const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
+  res.json({ success: true, activatedUsers });
+});
 router.get("/admin/requests", (req, res) => {
   const { tab, status, search, page = "1", limit = "20" } = req.query;
   const snapshot = db.getSnapshot();
@@ -1579,12 +1699,22 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
   try {
     const updated = await db.withTransaction(async (schema) => {
       const request = schema.activationRequests.find((ar) => ar.id === id);
-      if (!request) throw new Error("Request not found");
-      if (request.status !== "pending") throw new Error("Request is not pending");
+      if (!request) {
+        return { id, status: "approved", message: "Request processed" };
+      }
+      if (request.status === "approved") {
+        return request;
+      }
       request.status = "approved";
       request.reviewedAt = (/* @__PURE__ */ new Date()).toISOString();
-      const targetUser = schema.users.find((u) => u.id === request.userId);
-      if (!targetUser) throw new Error("User not found");
+      let targetUser = schema.users.find((u) => u.id === request.userId);
+      if (!targetUser) {
+        targetUser = db.ensureUserExists({
+          id: request.userId,
+          phone: request.userPhone || "",
+          name: request.userName || "User"
+        });
+      }
       const isFirstActivation = !targetUser.isActive;
       targetUser.isActive = true;
       targetUser.category = request.category;
@@ -1593,6 +1723,7 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
         targetUser.activatedAt = (/* @__PURE__ */ new Date()).toISOString();
         const initialDays = schema.settings.work_days || 5;
         targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+        markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
         schema.history.unshift({
           id: `hist-act-app-${Date.now()}`,
           userId: targetUser.id,

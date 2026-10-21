@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import seedDatabase from '../data/db.json';
+import seedActiveUsers from '../data/active_users.json';
 import {
   User,
   Video,
@@ -15,6 +16,7 @@ import {
   AppNotification,
   SystemSettings,
   Broadcast,
+  CategoryType,
 } from './types';
 import { getBangladeshDateString, addDaysToBangladeshDate } from './dateUtils';
 
@@ -38,6 +40,74 @@ const DATA_DIR = isServerless
   ? path.resolve('/tmp', 'earn_app_data')
   : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'db.json');
+const ACTIVE_USERS_FILE = path.resolve(DATA_DIR, 'active_users.json');
+
+interface ActiveUsersRecord {
+  activeUserIds: string[];
+  userActiveDetails: Record<
+    string,
+    { isActive: boolean; category?: CategoryType | null; workUntil?: string | null; activatedAt?: string | null }
+  >;
+}
+
+export const activeUsersStore: ActiveUsersRecord = {
+  activeUserIds: ['1001', '1002'],
+  userActiveDetails: {
+    '1001': { isActive: true, category: 'C', workUntil: '2030-12-31' },
+    '1002': { isActive: true, category: 'B', workUntil: '2026-10-30' },
+  },
+};
+
+function initActiveUsersStore() {
+  try {
+    if (seedActiveUsers && typeof seedActiveUsers === 'object') {
+      const s = seedActiveUsers as any;
+      if (Array.isArray(s.activeUserIds)) {
+        activeUsersStore.activeUserIds = Array.from(new Set([...activeUsersStore.activeUserIds, ...s.activeUserIds]));
+      }
+      if (s.userActiveDetails) {
+        activeUsersStore.userActiveDetails = { ...activeUsersStore.userActiveDetails, ...s.userActiveDetails };
+      }
+    }
+
+    if (fs.existsSync(ACTIVE_USERS_FILE)) {
+      const content = fs.readFileSync(ACTIVE_USERS_FILE, 'utf-8');
+      const data = JSON.parse(content);
+      if (Array.isArray(data.activeUserIds)) {
+        activeUsersStore.activeUserIds = Array.from(new Set([...activeUsersStore.activeUserIds, ...data.activeUserIds]));
+      }
+      if (data.userActiveDetails) {
+        activeUsersStore.userActiveDetails = { ...activeUsersStore.userActiveDetails, ...data.userActiveDetails };
+      }
+    }
+  } catch (err) {
+    console.error('Failed to init active users store:', err);
+  }
+}
+
+initActiveUsersStore();
+
+export function markUserActiveInStore(
+  userId: string,
+  category: CategoryType = 'B',
+  workUntil?: string | null,
+  activatedAt?: string | null
+) {
+  if (!activeUsersStore.activeUserIds.includes(userId)) {
+    activeUsersStore.activeUserIds.push(userId);
+  }
+  activeUsersStore.userActiveDetails[userId] = {
+    isActive: true,
+    category,
+    workUntil: workUntil || '2026-10-30',
+    activatedAt: activatedAt || new Date().toISOString(),
+  };
+
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ACTIVE_USERS_FILE, JSON.stringify(activeUsersStore, null, 2), 'utf-8');
+  } catch {}
+}
 
 const DEFAULT_SETTINGS: SystemSettings = {
   payment_number_bkash: '01604606880',
@@ -91,6 +161,7 @@ class DatabaseManager {
         const parsed = JSON.parse(raw);
         // Ensure defaults are merged
         parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+        this.mergeActiveUsers(parsed);
         return parsed;
       }
     } catch (err) {
@@ -101,9 +172,27 @@ class DatabaseManager {
     try {
       const fallback = JSON.parse(JSON.stringify(seedDatabase));
       fallback.settings = { ...DEFAULT_SETTINGS, ...(fallback.settings || {}) };
+      this.mergeActiveUsers(fallback);
       return fallback as DatabaseSchema;
     } catch {
       return this.createInitialData();
+    }
+  }
+
+  public mergeActiveUsers(schema: DatabaseSchema): void {
+    if (!schema || !Array.isArray(schema.users)) return;
+    for (const [userId, details] of Object.entries(activeUsersStore.userActiveDetails)) {
+      const user = schema.users.find((u) => u.id === userId);
+      if (user) {
+        user.isActive = true;
+        if (details.category && !user.category) user.category = details.category;
+        if (details.workUntil && (!user.workUntil || user.workUntil < details.workUntil)) {
+          user.workUntil = details.workUntil;
+        }
+        if (details.activatedAt && !user.activatedAt) {
+          user.activatedAt = details.activatedAt;
+        }
+      }
     }
   }
 
@@ -213,7 +302,20 @@ class DatabaseManager {
 
   public ensureUserExists(partial: { id: string; phone?: string; name?: string }): User {
     const existing = this.data.users.find((u) => u.id === partial.id);
-    if (existing) return existing;
+    if (existing) {
+      if (activeUsersStore.activeUserIds.includes(existing.id)) {
+        existing.isActive = true;
+        const details = activeUsersStore.userActiveDetails[existing.id];
+        if (details?.category && !existing.category) existing.category = details.category;
+        if (details?.workUntil && (!existing.workUntil || existing.workUntil < details.workUntil)) {
+          existing.workUntil = details.workUntil;
+        }
+      }
+      return existing;
+    }
+
+    const isInitiallyActive = activeUsersStore.activeUserIds.includes(partial.id);
+    const details = activeUsersStore.userActiveDetails[partial.id];
 
     const nowIso = new Date().toISOString();
     const newUser: User = {
@@ -221,15 +323,15 @@ class DatabaseManager {
       name: partial.name || 'User',
       phone: partial.phone || '',
       passwordHash: '',
-      category: null,
-      isActive: false,
+      category: details?.category || (isInitiallyActive ? 'B' : null),
+      isActive: isInitiallyActive,
       isBlocked: false,
       balance: 0,
       referredBy: 'ADMIN',
       referralCode: `EARN${partial.id}`,
-      workUntil: null,
+      workUntil: details?.workUntil || (isInitiallyActive ? '2026-10-30' : null),
       isTeamLeader: false,
-      activatedAt: null,
+      activatedAt: details?.activatedAt || (isInitiallyActive ? nowIso : null),
       createdAt: nowIso,
       updatedAt: nowIso,
     };

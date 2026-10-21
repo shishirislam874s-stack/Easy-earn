@@ -11,7 +11,7 @@
       "balance": 10000,
       "referredBy": null,
       "referralCode": "ADMIN",
-      "workUntil": null,
+      "workUntil": "2030-12-31",
       "isTeamLeader": true,
       "activatedAt": "2026-10-15T09:31:42.801Z",
       "createdAt": "2026-10-15T09:31:42.801Z",
@@ -22,17 +22,17 @@
       "name": "Shishir",
       "phone": "01621794375",
       "passwordHash": "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
-      "category": null,
-      "isActive": false,
+      "category": "B",
+      "isActive": true,
       "isBlocked": false,
       "balance": 0,
       "referredBy": "1001",
       "referralCode": "EARN1002",
-      "workUntil": null,
+      "workUntil": "2026-10-30",
       "isTeamLeader": false,
-      "activatedAt": null,
+      "activatedAt": "2026-10-21T07:25:17.622Z",
       "createdAt": "2026-10-21T06:00:00.000Z",
-      "updatedAt": "2026-10-21T06:00:00.000Z"
+      "updatedAt": "2026-10-21T07:25:17.622Z"
     }
   ],
   "videos": [

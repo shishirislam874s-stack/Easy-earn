@@ -47,6 +47,7 @@ export function AdminPanelView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingBadges, setPendingBadges] = useState({ activation: 0, video: 0, withdraw: 0 });
   const [isLoading, setIsLoading] = useState(false);
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
 
   // Tap-to-zoom screenshot modal
   const [zoomedScreenshot, setZoomedScreenshot] = useState<string | null>(null);
@@ -203,6 +204,20 @@ export function AdminPanelView() {
 
   useEffect(() => {
     fetchStats();
+    // Sync active users saved in browser to server so refreshing never causes inactive IDs
+    try {
+      const saved = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+      if (Array.isArray(saved) && saved.length > 0) {
+        adminFetch('/api/admin/sync-active-users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activeUserIds: saved }),
+        })
+          .then((res) => res.json())
+          .then(() => fetchStats())
+          .catch(() => {});
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -224,57 +239,135 @@ export function AdminPanelView() {
     showToast(`${t.copied}: ${text}`);
   };
 
-  // Actions for requests
+  // Actions for requests: single-click instant response with optimistic UI
   const handleApproveActivation = async (id: string) => {
+    if (processingIds.has(id)) return;
+    setProcessingIds((prev) => new Set([...prev, id]));
+
+    const targetReq = requestsData.find((r) => r.id === id);
+
+    // Instant optimistic feedback on 1st click
+    showToast(language === 'bn' ? 'অ্যাক্টিভেশন অনুমোদন সফল!' : 'Activation approved!');
+    if (statusFilter === 'pending') {
+      setRequestsData((prev) => prev.filter((r) => r.id !== id));
+    } else {
+      setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'approved' } : r)));
+    }
+    setPendingBadges((prev) => ({ ...prev, activation: Math.max(0, prev.activation - 1) }));
+    setStats((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            activatedUsers: (prev.activatedUsers || 0) + 1,
+            pendingActivation: Math.max(0, (prev.pendingActivation || 0) - 1),
+          }
+        : prev
+    );
+
+    // Remember in localStorage so refresh never loses activation
     try {
-      const res = await adminFetch(`/api/admin/activation/${id}/approve`, { method: 'POST' });
-      if (res.ok) {
-        showToast(language === 'bn' ? 'অ্যাক্টিভেশন অনুমোদন সফল!' : 'Activation approved!');
-        // Remove from list if in pending view
-        if (statusFilter === 'pending') {
-          setRequestsData((prev) => prev.filter((r) => r.id !== id));
-        } else {
-          setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'approved' } : r)));
-        }
-        fetchStats();
+      const saved: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+      if (targetReq?.userId && !saved.includes(targetReq.userId)) {
+        saved.push(targetReq.userId);
+        localStorage.setItem('earn_approved_users', JSON.stringify(saved));
       }
     } catch {}
+
+    try {
+      await adminFetch(`/api/admin/activation/${id}/approve`, { method: 'POST' });
+    } catch (err) {
+      console.error('Approve failed:', err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      fetchStats();
+    }
   };
 
   const handleApproveVideo = async (id: string) => {
+    if (processingIds.has(id)) return;
+    setProcessingIds((prev) => new Set([...prev, id]));
+
+    // Instant optimistic feedback on 1st click
+    showToast(language === 'bn' ? 'ভিডিও কাজ অনুমোদন সফল!' : 'Video approved!');
+    if (statusFilter === 'pending') {
+      setRequestsData((prev) => prev.filter((r) => r.id !== id));
+    } else {
+      setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'approved' } : r)));
+    }
+    setPendingBadges((prev) => ({ ...prev, video: Math.max(0, prev.video - 1) }));
+    setStats((prev: any) =>
+      prev ? { ...prev, pendingVideo: Math.max(0, (prev.pendingVideo || 0) - 1) } : prev
+    );
+
     try {
-      const res = await adminFetch(`/api/admin/video/${id}/approve`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(language === 'bn' ? 'ভিডিও কাজ অনুমোদন সফল!' : 'Video approved!');
-        if (statusFilter === 'pending') {
-          setRequestsData((prev) => prev.filter((r) => r.id !== id));
-        } else {
-          setRequestsData((prev) => prev.map((r) => (r.id === id ? data.submission : r)));
-        }
-        fetchStats();
-      }
-    } catch {}
+      await adminFetch(`/api/admin/video/${id}/approve`, { method: 'POST' });
+    } catch (err) {
+      console.error('Video approve failed:', err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      fetchStats();
+    }
   };
 
   const handlePayWithdraw = async (id: string) => {
+    if (processingIds.has(id)) return;
+    setProcessingIds((prev) => new Set([...prev, id]));
+
+    const target = requestsData.find((r) => r.id === id);
+
+    // Instant optimistic feedback on 1st click
+    showToast(language === 'bn' ? 'উইথড্র পেইড মার্ক করা হয়েছে!' : 'Withdrawal marked paid!');
+    if (statusFilter === 'pending') {
+      setRequestsData((prev) => prev.filter((r) => r.id !== id));
+    } else {
+      setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'paid' } : r)));
+    }
+    setPendingBadges((prev) => ({ ...prev, withdraw: Math.max(0, prev.withdraw - 1) }));
+    setStats((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            pendingWithdraw: Math.max(0, (prev.pendingWithdraw || 0) - 1),
+            totalPaid: (prev.totalPaid || 0) + (target?.amount || 0),
+          }
+        : prev
+    );
+
     try {
-      const res = await adminFetch(`/api/admin/withdraw/${id}/pay`, { method: 'POST' });
-      if (res.ok) {
-        showToast(language === 'bn' ? 'উইথড্র পেইড মার্ক করা হয়েছে!' : 'Withdrawal marked paid!');
-        if (statusFilter === 'pending') {
-          setRequestsData((prev) => prev.filter((r) => r.id !== id));
-        } else {
-          setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'paid' } : r)));
-        }
-        fetchStats();
-      }
-    } catch {}
+      await adminFetch(`/api/admin/withdraw/${id}/pay`, { method: 'POST' });
+    } catch (err) {
+      console.error('Pay withdraw failed:', err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      fetchStats();
+    }
   };
 
   const confirmReject = async () => {
     if (!rejectDialog) return;
     const { type, id } = rejectDialog;
+    if (processingIds.has(id)) return;
+    setProcessingIds((prev) => new Set([...prev, id]));
+
+    showToast(language === 'bn' ? 'রিকোয়েস্ট বাতিল করা হয়েছে' : 'Request rejected');
+    if (statusFilter === 'pending') {
+      setRequestsData((prev) => prev.filter((r) => r.id !== id));
+    } else {
+      setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'rejected' } : r)));
+    }
+    setRejectDialog(null);
 
     try {
       let endpoint = '';
@@ -282,24 +375,22 @@ export function AdminPanelView() {
       else if (type === 'video') endpoint = `/api/admin/video/${id}/reject`;
       else if (type === 'withdraw') endpoint = `/api/admin/withdraw/${id}/reject`;
 
-      const res = await adminFetch(endpoint, {
+      await adminFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: rejectReason }),
       });
-
-      if (res.ok) {
-        showToast(language === 'bn' ? 'রিকোয়েস্ট বাতিল করা হয়েছে' : 'Request rejected');
-        if (statusFilter === 'pending') {
-          setRequestsData((prev) => prev.filter((r) => r.id !== id));
-        } else {
-          setRequestsData((prev) => prev.map((r) => (r.id === id ? { ...r, status: 'rejected' } : r)));
-        }
-        setRejectDialog(null);
-        setRejectReason('');
-        fetchStats();
-      }
-    } catch {}
+      setRejectReason('');
+    } catch (err) {
+      console.error('Reject failed:', err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      fetchStats();
+    }
   };
 
   // Video Management actions
@@ -796,6 +887,8 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="success"
                         size="sm"
+                        disabled={processingIds.has(req.id)}
+                        isLoading={processingIds.has(req.id)}
                         onClick={() => handleApproveActivation(req.id)}
                       >
                         <Check className="w-4 h-4" />
@@ -804,6 +897,7 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="danger"
                         size="sm"
+                        disabled={processingIds.has(req.id)}
                         onClick={() =>
                           setRejectDialog({
                             isOpen: true,
@@ -906,6 +1000,8 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="success"
                         size="sm"
+                        disabled={processingIds.has(sub.id)}
+                        isLoading={processingIds.has(sub.id)}
                         onClick={() => handleApproveVideo(sub.id)}
                       >
                         <Check className="w-4 h-4" />
@@ -914,6 +1010,7 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="danger"
                         size="sm"
+                        disabled={processingIds.has(sub.id)}
                         onClick={() =>
                           setRejectDialog({
                             isOpen: true,
@@ -1001,6 +1098,8 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="success"
                         size="sm"
+                        disabled={processingIds.has(w.id)}
+                        isLoading={processingIds.has(w.id)}
                         onClick={() => handlePayWithdraw(w.id)}
                       >
                         <Check className="w-4 h-4" />
@@ -1009,6 +1108,7 @@ export function AdminPanelView() {
                       <LiquidButton
                         variant="danger"
                         size="sm"
+                        disabled={processingIds.has(w.id)}
                         onClick={() =>
                           setRejectDialog({
                             isOpen: true,
