@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build:client": "vite build",
+    "build:api": "esbuild server/vercel.ts --bundle --platform=node --format=esm --outfile=api/index.js --packages=external",
+    "build": "vite build && npm run build:api",
     "start": "tsx server.ts",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist api/index.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

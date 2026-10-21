@@ -76,9 +76,20 @@ export async function safeJson<T = any>(res: Response, defaultMessage = 'অন�
     }
   }
 
+  let textSnippet = '';
+  try {
+    const rawText = await res.text();
+    const cleanText = rawText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleanText && cleanText.length > 0 && cleanText.length < 150 && !cleanText.startsWith('<!DOCTYPE')) {
+      textSnippet = cleanText;
+    }
+  } catch {}
+
   // If HTML or plaintext error from host (e.g., Vercel 404 / 502)
   let hint = defaultMessage;
-  if (res.status === 404) {
+  if (textSnippet) {
+    hint = textSnippet;
+  } else if (res.status === 404) {
     hint = 'সার্ভার এপিআই পাওয়া যায়নি (404)। Vercel এ ব্যাকএন্ড কনফিগারেশন রিলোড করুন।';
   } else if (res.status === 500) {
     hint = 'সার্ভার অভ্যন্তরীণ সমস্যা (500 Internal Error)';

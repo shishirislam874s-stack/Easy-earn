@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import seedDatabase from '../data/db.json';
 import {
   User,
   Video,
@@ -76,16 +77,12 @@ class DatabaseManager {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
 
-      // In serverless /tmp environment, populate from bundled data/db.json seed if available
+      // In serverless /tmp environment, populate from bundled data/db.json seed
       if (!fs.existsSync(DB_FILE)) {
-        const seedPath = path.resolve(process.cwd(), 'data', 'db.json');
-        if (fs.existsSync(seedPath)) {
-          try {
-            const seedRaw = fs.readFileSync(seedPath, 'utf-8');
-            fs.writeFileSync(DB_FILE, seedRaw, 'utf-8');
-          } catch (e) {
-            console.warn('Could not copy seed database to DATA_DIR:', e);
-          }
+        try {
+          fs.writeFileSync(DB_FILE, JSON.stringify(seedDatabase, null, 2), 'utf-8');
+        } catch (e) {
+          console.warn('Could not write seed database to DATA_DIR:', e);
         }
       }
 
@@ -97,10 +94,17 @@ class DatabaseManager {
         return parsed;
       }
     } catch (err) {
-      console.error('Error loading db file, re-initializing:', err);
+      console.error('Error loading db file, falling back to seed:', err);
     }
 
-    return this.createInitialData();
+    // Direct fallback from bundled seed
+    try {
+      const fallback = JSON.parse(JSON.stringify(seedDatabase));
+      fallback.settings = { ...DEFAULT_SETTINGS, ...(fallback.settings || {}) };
+      return fallback as DatabaseSchema;
+    } catch {
+      return this.createInitialData();
+    }
   }
 
   private createInitialData(): DatabaseSchema {
