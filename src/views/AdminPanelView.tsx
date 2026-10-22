@@ -134,15 +134,45 @@ export function AdminPanelView() {
       const res = await adminFetch(`/api/admin/requests?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
+        let items: any[] = data.items || [];
+
+        // Reconcile with localStorage approvals so refresh never reverts approved requests back to pending
+        try {
+          const approvedReqIds: string[] = JSON.parse(localStorage.getItem('earn_approved_request_ids') || '[]');
+          const approvedTrxIds: string[] = JSON.parse(localStorage.getItem('earn_approved_trx_ids') || '[]');
+          const approvedUsers: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+
+          if (activeTab === 'activation') {
+            items = items.map((r: any) => {
+              const isApproved =
+                r.status === 'approved' ||
+                approvedReqIds.includes(r.id) ||
+                (r.transactionId && approvedTrxIds.includes(String(r.transactionId).trim().toUpperCase())) ||
+                approvedUsers.includes(r.userId);
+              return isApproved ? { ...r, status: 'approved' } : r;
+            });
+
+            if (statusFilter === 'pending') {
+              items = items.filter((r: any) => r.status === 'pending');
+            }
+          }
+        } catch {}
+
         if (append) {
-          setRequestsData((prev) => [...prev, ...(data.items || [])]);
+          setRequestsData((prev) => [...prev, ...items]);
         } else {
-          setRequestsData(data.items || []);
+          setRequestsData(items);
         }
         setHasMore(Boolean(data.hasMore));
         setPage(data.page || 1);
         if (data.pendingCounts) {
-          setPendingBadges(data.pendingCounts);
+          const pendingActCount = activeTab === 'activation' && statusFilter === 'pending'
+            ? items.length
+            : data.pendingCounts.activation;
+          setPendingBadges({
+            ...data.pendingCounts,
+            activation: pendingActCount,
+          });
         }
       }
     } finally {
@@ -213,17 +243,31 @@ export function AdminPanelView() {
 
   useEffect(() => {
     fetchStats();
-    // Sync active users saved in browser to server so refreshing never causes inactive IDs
+    // Sync active users & approved requests saved in browser to server so refreshing never causes inactive IDs or resurfaced pending requests
     try {
-      const saved = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
-      if (Array.isArray(saved) && saved.length > 0) {
+      const savedUsers = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+      const savedReqIds = JSON.parse(localStorage.getItem('earn_approved_request_ids') || '[]');
+      const savedTrxIds = JSON.parse(localStorage.getItem('earn_approved_trx_ids') || '[]');
+
+      if (
+        (Array.isArray(savedUsers) && savedUsers.length > 0) ||
+        (Array.isArray(savedReqIds) && savedReqIds.length > 0) ||
+        (Array.isArray(savedTrxIds) && savedTrxIds.length > 0)
+      ) {
         adminFetch('/api/admin/sync-active-users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ activeUserIds: saved }),
+          body: JSON.stringify({
+            activeUserIds: savedUsers,
+            approvedRequestIds: savedReqIds,
+            approvedTrxIds: savedTrxIds,
+          }),
         })
           .then((res) => res.json())
-          .then(() => fetchStats())
+          .then(() => {
+            fetchStats();
+            fetchRequests(1, false);
+          })
           .catch(() => {});
       }
     } catch {}
@@ -273,12 +317,27 @@ export function AdminPanelView() {
         : prev
     );
 
-    // Remember in localStorage so refresh never loses activation
+    // Remember in localStorage permanently so refresh never loses activation
     try {
-      const saved: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
-      if (targetReq?.userId && !saved.includes(targetReq.userId)) {
-        saved.push(targetReq.userId);
-        localStorage.setItem('earn_approved_users', JSON.stringify(saved));
+      const savedUsers: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+      if (targetReq?.userId && !savedUsers.includes(targetReq.userId)) {
+        savedUsers.push(targetReq.userId);
+        localStorage.setItem('earn_approved_users', JSON.stringify(savedUsers));
+      }
+
+      const savedReqIds: string[] = JSON.parse(localStorage.getItem('earn_approved_request_ids') || '[]');
+      if (!savedReqIds.includes(id)) {
+        savedReqIds.push(id);
+        localStorage.setItem('earn_approved_request_ids', JSON.stringify(savedReqIds));
+      }
+
+      if (targetReq?.transactionId) {
+        const trx = String(targetReq.transactionId).trim().toUpperCase();
+        const savedTrxIds: string[] = JSON.parse(localStorage.getItem('earn_approved_trx_ids') || '[]');
+        if (!savedTrxIds.includes(trx)) {
+          savedTrxIds.push(trx);
+          localStorage.setItem('earn_approved_trx_ids', JSON.stringify(savedTrxIds));
+        }
       }
     } catch {}
 

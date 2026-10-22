@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { db, markUserActiveInStore, saveActivationRequestToStore, activationRequestsStore } from './db';
+import { db, markUserActiveInStore, saveActivationRequestToStore, activationRequestsStore, activeUsersStore } from './db';
 import {
   createUserSession,
   createAdminSession,
@@ -669,9 +669,21 @@ router.post('/activation/sync-pending', async (req: AuthenticatedRequest, res: R
   await db.withTransaction((schema) => {
     const cleanTrx = String(request.transactionId).trim().toUpperCase();
     const exists = schema.activationRequests.find((r) => r.transactionId.toUpperCase() === cleanTrx);
+    const targetUser = schema.users.find((u) => u.id === request.userId);
+    const isUserActive = Boolean(targetUser?.isActive || activeUsersStore.activeUserIds.includes(request.userId));
+
     if (!exists) {
+      if (isUserActive) {
+        request.status = 'approved';
+      }
       schema.activationRequests.unshift(request);
       saveActivationRequestToStore(request);
+    } else {
+      // If already marked approved or user is active, ensure status stays approved
+      if (isUserActive || exists.status === 'approved') {
+        exists.status = 'approved';
+        saveActivationRequestToStore(exists);
+      }
     }
   });
 
@@ -1164,6 +1176,17 @@ router.use('/admin', adminAuthMiddleware);
 router.get('/admin/stats', (req: Request, res: Response) => {
   const snapshot = db.getSnapshot();
 
+  // Auto-reconcile: If user is active, pending activation request must be considered approved
+  for (const r of snapshot.activationRequests) {
+    if (r.status === 'pending') {
+      const u = snapshot.users.find((user) => user.id === r.userId);
+      if (u && u.isActive) {
+        r.status = 'approved';
+        saveActivationRequestToStore(r);
+      }
+    }
+  }
+
   const totalUsers = snapshot.users.length;
   const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
 
@@ -1186,11 +1209,11 @@ router.get('/admin/stats', (req: Request, res: Response) => {
   });
 });
 
-// Sync active users from client localStorage to backend (prevents active status loss on cold starts/refresh)
+// Sync active users & approved requests from client localStorage to backend
 router.post('/admin/sync-active-users', async (req: Request, res: Response) => {
-  const { activeUserIds, userActiveDetails } = req.body;
-  if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
-    await db.withTransaction(async (schema) => {
+  const { activeUserIds, userActiveDetails, approvedRequestIds, approvedTrxIds } = req.body;
+  await db.withTransaction(async (schema) => {
+    if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
       for (const uid of activeUserIds) {
         const idStr = String(uid).trim();
         let u = schema.users.find((user) => user.id === idStr);
@@ -1204,8 +1227,28 @@ router.post('/admin/sync-active-users', async (req: Request, res: Response) => {
         if (details?.activatedAt) u.activatedAt = details.activatedAt;
         markUserActiveInStore(u.id, u.category || 'B', u.workUntil, u.activatedAt);
       }
-    });
-  }
+    }
+
+    const reqIdList: string[] = Array.isArray(approvedRequestIds) ? approvedRequestIds.map(String) : [];
+    const trxList: string[] = Array.isArray(approvedTrxIds)
+      ? approvedTrxIds.map((t: string) => String(t).trim().toUpperCase())
+      : [];
+
+    for (const r of schema.activationRequests) {
+      const matchId = reqIdList.includes(r.id);
+      const matchTrx = r.transactionId && trxList.includes(String(r.transactionId).trim().toUpperCase());
+      const userIsActive = Boolean(
+        schema.users.find((u) => u.id === r.userId)?.isActive ||
+        (Array.isArray(activeUserIds) && activeUserIds.includes(r.userId)) ||
+        activeUsersStore.activeUserIds.includes(r.userId)
+      );
+      if (matchId || matchTrx || userIsActive) {
+        r.status = 'approved';
+        saveActivationRequestToStore(r);
+      }
+    }
+  });
+
   const snapshot = db.getSnapshot();
   const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
   res.json({ success: true, activatedUsers });
@@ -1222,6 +1265,17 @@ router.get('/admin/requests', (req: Request, res: Response) => {
   let items: any[] = [];
 
   if (tab === 'activation') {
+    // Reconcile pending activations with active users
+    for (const r of snapshot.activationRequests) {
+      if (r.status === 'pending') {
+        const u = snapshot.users.find((user) => user.id === r.userId);
+        if (u && u.isActive) {
+          r.status = 'approved';
+          saveActivationRequestToStore(r);
+        }
+      }
+    }
+
     items = snapshot.activationRequests.filter((r) => {
       if (status && status !== 'all' && r.status !== status) return false;
       if (searchTerm) {
@@ -1304,7 +1358,14 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
 
   try {
     const updated = await db.withTransaction(async (schema) => {
-      const request = schema.activationRequests.find((ar) => ar.id === id);
+      let request = schema.activationRequests.find((ar) => ar.id === id);
+      if (!request) {
+        const fromStore = activationRequestsStore.find((ar) => ar.id === id);
+        if (fromStore) {
+          schema.activationRequests.unshift(fromStore);
+          request = fromStore;
+        }
+      }
       if (!request) {
         return { id, status: 'approved', message: 'Request processed' };
       }

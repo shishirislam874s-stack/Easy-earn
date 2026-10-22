@@ -17,7 +17,9 @@ export function ActivationView() {
   const [latestRequest, setLatestRequest] = useState<any>(() => {
     try {
       const savedUserStr = localStorage.getItem('earn_saved_user');
-      const uid = savedUserStr ? JSON.parse(savedUserStr)?.id : null;
+      const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
+      if (savedUser?.isActive) return null;
+      const uid = savedUser?.id;
       if (uid) {
         const saved = localStorage.getItem(`earn_pending_act_${uid}`);
         return saved ? JSON.parse(saved) : null;
@@ -29,39 +31,48 @@ export function ActivationView() {
 
   const fetchStatus = async () => {
     try {
-      // Sync locally cached pending request with server to prevent loss on reload
+      // If user is already active, immediately clear any cached pending request and DO NOT sync as pending!
       if (user?.id) {
-        const localSaved = localStorage.getItem(`earn_pending_act_${user.id}`);
-        if (localSaved) {
-          try {
-            const parsed = JSON.parse(localSaved);
-            if (parsed && parsed.status === 'pending') {
-              authFetch('/api/activation/sync-pending', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ request: parsed }),
-              }).catch(() => {});
-            }
-          } catch {}
+        if (user?.isActive) {
+          localStorage.removeItem(`earn_pending_act_${user.id}`);
+          setLatestRequest(null);
+        } else {
+          const localSaved = localStorage.getItem(`earn_pending_act_${user.id}`);
+          if (localSaved) {
+            try {
+              const parsed = JSON.parse(localSaved);
+              if (parsed && parsed.status === 'pending') {
+                authFetch('/api/activation/sync-pending', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ request: parsed }),
+                }).catch(() => {});
+              }
+            } catch {}
+          }
         }
       }
 
       const res = await authFetch('/api/activation/status');
       if (res.ok) {
         const data = await res.json();
-        if (data.latestRequest) {
-          setLatestRequest(data.latestRequest);
-          if (user?.id) {
-            if (data.latestRequest.status === 'approved' || data.isActive) {
-              localStorage.removeItem(`earn_pending_act_${user.id}`);
-            } else {
+        if (data.isActive || user?.isActive) {
+          if (user?.id) localStorage.removeItem(`earn_pending_act_${user.id}`);
+          setLatestRequest(null);
+          if (!user?.isActive) {
+            await refreshUserData();
+            showToast(language === 'bn' ? 'অভিনন্দন! আপনার আইডি সক্রিয় হয়েছে!' : 'Congratulations! Your ID has been activated!');
+          }
+        } else if (data.latestRequest) {
+          if (data.latestRequest.status === 'approved') {
+            if (user?.id) localStorage.removeItem(`earn_pending_act_${user.id}`);
+            setLatestRequest(null);
+          } else {
+            setLatestRequest(data.latestRequest);
+            if (user?.id) {
               localStorage.setItem(`earn_pending_act_${user.id}`, JSON.stringify(data.latestRequest));
             }
           }
-        }
-        if (data.isActive && !user?.isActive) {
-          await refreshUserData();
-          showToast(language === 'bn' ? 'অভিনন্দন! আপনার আইডি সক্রিয় হয়েছে!' : 'Congratulations! Your ID has been activated!');
         }
       }
     } catch {}

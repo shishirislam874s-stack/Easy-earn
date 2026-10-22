@@ -1388,9 +1388,19 @@ router.post("/activation/sync-pending", async (req, res) => {
   await db.withTransaction((schema) => {
     const cleanTrx = String(request.transactionId).trim().toUpperCase();
     const exists = schema.activationRequests.find((r) => r.transactionId.toUpperCase() === cleanTrx);
+    const targetUser = schema.users.find((u) => u.id === request.userId);
+    const isUserActive = Boolean(targetUser?.isActive || activeUsersStore.activeUserIds.includes(request.userId));
     if (!exists) {
+      if (isUserActive) {
+        request.status = "approved";
+      }
       schema.activationRequests.unshift(request);
       saveActivationRequestToStore(request);
+    } else {
+      if (isUserActive || exists.status === "approved") {
+        exists.status = "approved";
+        saveActivationRequestToStore(exists);
+      }
     }
   });
   res.json({ synced: true });
@@ -1753,6 +1763,15 @@ router.get("/broadcasts", (req, res) => {
 router.use("/admin", adminAuthMiddleware);
 router.get("/admin/stats", (req, res) => {
   const snapshot = db.getSnapshot();
+  for (const r of snapshot.activationRequests) {
+    if (r.status === "pending") {
+      const u = snapshot.users.find((user) => user.id === r.userId);
+      if (u && u.isActive) {
+        r.status = "approved";
+        saveActivationRequestToStore(r);
+      }
+    }
+  }
   const totalUsers = snapshot.users.length;
   const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
   const pendingActivation = snapshot.activationRequests.filter((r) => r.status === "pending").length;
@@ -1772,9 +1791,9 @@ router.get("/admin/stats", (req, res) => {
   });
 });
 router.post("/admin/sync-active-users", async (req, res) => {
-  const { activeUserIds, userActiveDetails } = req.body;
-  if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
-    await db.withTransaction(async (schema) => {
+  const { activeUserIds, userActiveDetails, approvedRequestIds, approvedTrxIds } = req.body;
+  await db.withTransaction(async (schema) => {
+    if (Array.isArray(activeUserIds) && activeUserIds.length > 0) {
       for (const uid of activeUserIds) {
         const idStr = String(uid).trim();
         let u = schema.users.find((user) => user.id === idStr);
@@ -1788,8 +1807,21 @@ router.post("/admin/sync-active-users", async (req, res) => {
         if (details?.activatedAt) u.activatedAt = details.activatedAt;
         markUserActiveInStore(u.id, u.category || "B", u.workUntil, u.activatedAt);
       }
-    });
-  }
+    }
+    const reqIdList = Array.isArray(approvedRequestIds) ? approvedRequestIds.map(String) : [];
+    const trxList = Array.isArray(approvedTrxIds) ? approvedTrxIds.map((t) => String(t).trim().toUpperCase()) : [];
+    for (const r of schema.activationRequests) {
+      const matchId = reqIdList.includes(r.id);
+      const matchTrx = r.transactionId && trxList.includes(String(r.transactionId).trim().toUpperCase());
+      const userIsActive = Boolean(
+        schema.users.find((u) => u.id === r.userId)?.isActive || Array.isArray(activeUserIds) && activeUserIds.includes(r.userId) || activeUsersStore.activeUserIds.includes(r.userId)
+      );
+      if (matchId || matchTrx || userIsActive) {
+        r.status = "approved";
+        saveActivationRequestToStore(r);
+      }
+    }
+  });
   const snapshot = db.getSnapshot();
   const activatedUsers = snapshot.users.filter((u) => u.isActive).length;
   res.json({ success: true, activatedUsers });
@@ -1802,6 +1834,15 @@ router.get("/admin/requests", (req, res) => {
   const searchTerm = (search || "").toLowerCase().trim();
   let items = [];
   if (tab === "activation") {
+    for (const r of snapshot.activationRequests) {
+      if (r.status === "pending") {
+        const u = snapshot.users.find((user) => user.id === r.userId);
+        if (u && u.isActive) {
+          r.status = "approved";
+          saveActivationRequestToStore(r);
+        }
+      }
+    }
     items = snapshot.activationRequests.filter((r) => {
       if (status && status !== "all" && r.status !== status) return false;
       if (searchTerm) {
@@ -1857,7 +1898,14 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
   const today = getBangladeshDateString();
   try {
     const updated = await db.withTransaction(async (schema) => {
-      const request = schema.activationRequests.find((ar) => ar.id === id);
+      let request = schema.activationRequests.find((ar) => ar.id === id);
+      if (!request) {
+        const fromStore = activationRequestsStore.find((ar) => ar.id === id);
+        if (fromStore) {
+          schema.activationRequests.unshift(fromStore);
+          request = fromStore;
+        }
+      }
       if (!request) {
         return { id, status: "approved", message: "Request processed" };
       }
