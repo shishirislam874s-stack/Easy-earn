@@ -1,5 +1,5 @@
 {
-  "name": "Earn App",
+  "name": "Earning point",
   "description": "Full-stack mobile-first bilingual (Bangla & English) earning platform with Liquid Glass design, daily video tasks, tiered categories, team bonuses, and instant activation.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

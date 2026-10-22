@@ -29,6 +29,8 @@ export function VideosView({ onGoToCategory, onGoToRefer }: VideosViewProps) {
     pendingVideoRewards,
     workDaysRemaining,
     isWorkWindowOpen,
+    referralsTowardsWork,
+    isInitialFiveDays,
     refreshUserData,
     language,
     t,
@@ -214,17 +216,73 @@ export function VideosView({ onGoToCategory, onGoToRefer }: VideosViewProps) {
 
   // Condition 2: Work window has expired
   if (lockedReason === 'WORK_WINDOW_EXPIRED' || (!isWorkWindowOpen && user?.isActive)) {
+    const unlockDays = user?.category === 'C' ? 4 : user?.category === 'B' ? 3 : 2;
+    const currentRefs = referralsTowardsWork || 0;
+    const neededRefs = Math.max(0, 5 - currentRefs);
+    const refPercent = Math.min(100, Math.round((currentRefs / 5) * 100));
+
     return (
       <div className="max-w-md mx-auto px-4 py-8">
-        <LiquidCard elevated className="text-center py-10 border-rose-500/30">
-          <div className="h-16 w-16 rounded-3xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400 mx-auto mb-4">
+        <LiquidCard elevated className="text-center py-8 border-rose-500/30 space-y-4">
+          <div className="h-16 w-16 rounded-3xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-400 mx-auto">
             <Clock className="w-8 h-8" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">{t.videoWorkLockedTitle}</h2>
-          <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-            {t.videoWorkLockedDesc}
+
+          <div>
+            <span className="text-[11px] font-extrabold px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30 uppercase tracking-wider inline-block mb-2">
+              {language === 'bn' ? `ক্যাটাগরি ${user?.category || 'A'} আইডি` : `Category ${user?.category || 'A'} ID`}
+            </span>
+            <h2 className="text-xl font-bold text-white mb-1">
+              {language === 'bn' ? 'কাজের মেয়াদ শেষ হয়েছে' : 'Work Period Expired'}
+            </h2>
+            <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+              {language === 'bn'
+                ? `প্রাথমিক ৫ দিনের কাজ শেষ হয়েছে। পরবর্তী ${unlockDays} দিন কাজ চালু করতে ৫ জন নতুন রেফার করুন।`
+                : `Initial 5-day work period ended. Refer 5 new members to unlock ${unlockDays} days of work.`}
+            </p>
+          </div>
+
+          {/* 5-Referral Progress Bar */}
+          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-left space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-white">
+              <span>{language === 'bn' ? 'রেফার অগ্রগতি:' : 'Referral Progress:'}</span>
+              <span className="text-cyan-300 font-mono font-black">{currentRefs} / 5</span>
+            </div>
+            <div className="w-full h-3 rounded-full bg-slate-800 p-0.5 border border-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-500"
+                style={{ width: `${refPercent}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>{neededRefs > 0 ? (language === 'bn' ? `আরও ${neededRefs} জন বাকি` : `${neededRefs} more needed`) : (language === 'bn' ? 'সম্পন্ন হয়েছে!' : 'Completed!')}</span>
+              <span className="text-emerald-300 font-semibold">{language === 'bn' ? `আনলক হবে: +${unlockDays} দিন` : `Unlocks: +${unlockDays} days`}</span>
+            </div>
+          </div>
+
+          {/* Category Rule Reminder */}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className={`p-2 rounded-xl border ${user?.category === 'A' ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+              <span className="font-bold block text-[10px]">Cat A</span>
+              <span className="font-extrabold text-xs">৫ রেফ = ২ দিন</span>
+            </div>
+            <div className={`p-2 rounded-xl border ${user?.category === 'B' ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+              <span className="font-bold block text-[10px]">Cat B</span>
+              <span className="font-extrabold text-xs">৫ রেফ = ৩ দিন</span>
+            </div>
+            <div className={`p-2 rounded-xl border ${user?.category === 'C' ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200' : 'bg-white/5 border-white/10 text-slate-400'}`}>
+              <span className="font-bold block text-[10px]">Cat C</span>
+              <span className="font-extrabold text-xs">৫ রেফ = ৪ দিন</span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-400 leading-snug">
+            {language === 'bn'
+              ? 'নির্ধারিত দিন কাজ করার পর আবার অফ হবে এবং পুনরায় ৫ জন রেফার করে কাজ চালু করতে হবে।'
+              : 'After completing these days, work locks again until 5 more referrals are made.'}
           </p>
-          <LiquidButton variant="primary" size="lg" onClick={onGoToRefer}>
+
+          <LiquidButton variant="primary" size="lg" fullWidth onClick={onGoToRefer}>
             {t.goToRefer}
           </LiquidButton>
         </LiquidCard>
@@ -256,7 +314,7 @@ export function VideosView({ onGoToCategory, onGoToRefer }: VideosViewProps) {
           {/* Work Open Days badge */}
           <div className="text-right">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              {t.workOpenDays}
+              {isInitialFiveDays ? (language === 'bn' ? 'প্রাথমিক ৫ দিন' : 'Initial 5 Days') : t.workOpenDays}
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-extrabold mt-0.5">
               <Sparkles className="w-3.5 h-3.5" />
@@ -264,6 +322,15 @@ export function VideosView({ onGoToCategory, onGoToRefer }: VideosViewProps) {
                 {workDaysRemaining} {t.days}
               </span>
             </span>
+            {isInitialFiveDays ? (
+              <span className="text-[9px] text-amber-300/80 block mt-0.5">
+                {language === 'bn' ? 'এই ৫ দিনের রেফার মেয়াদ বাড়াবে না' : 'Initial referrals do not extend'}
+              </span>
+            ) : (
+              <span className="text-[9px] text-cyan-300/80 block mt-0.5">
+                {language === 'bn' ? `চলতি রেফার: ${referralsTowardsWork || 0}/৫` : `Refs: ${referralsTowardsWork || 0}/5`}
+              </span>
+            )}
           </div>
         </div>
 

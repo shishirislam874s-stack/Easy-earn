@@ -12,6 +12,9 @@ export interface User {
   referredBy: string | null; // User ID who referred this user
   referralCode: string;
   workUntil: string | null; // Date string YYYY-MM-DD (Bangladesh time UTC+6)
+  initialWorkUntil?: string | null; // Date marking end of the initial 5 days
+  referralsTowardsWork?: number; // Count of referrals towards next 5-referral unlock cycle (0 to 5)
+  totalReferralsAfterInitial?: number; // Total referrals joined after initial 5 days
   isTeamLeader: boolean;
   activatedAt: string | null;
   createdAt: string;

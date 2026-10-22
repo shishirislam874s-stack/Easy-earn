@@ -24,7 +24,7 @@ var db_default = {
       balance: 1e4,
       referredBy: null,
       referralCode: "ADMIN",
-      workUntil: null,
+      workUntil: "2030-12-31",
       isTeamLeader: true,
       activatedAt: "2026-10-15T09:31:42.801Z",
       createdAt: "2026-10-15T09:31:42.801Z",
@@ -136,17 +136,22 @@ var db_default = {
 
 // data/active_users.json
 var active_users_default = {
-  activeUserIds: ["1001", "1002"],
+  activeUserIds: [
+    "1001",
+    "1002"
+  ],
   userActiveDetails: {
     "1001": {
       isActive: true,
       category: "C",
-      workUntil: "2030-12-31"
+      workUntil: "2030-12-31",
+      activatedAt: "2026-10-15T09:31:42.801Z"
     },
     "1002": {
       isActive: true,
       category: "B",
-      workUntil: "2026-10-30"
+      workUntil: "2026-10-30",
+      activatedAt: "2026-10-21T07:25:17.622Z"
     }
   }
 };
@@ -266,6 +271,12 @@ var DatabaseManager = class {
   }
   mergeActiveUsers(schema) {
     if (!schema || !Array.isArray(schema.users)) return;
+    for (const userId of activeUsersStore.activeUserIds) {
+      const user = schema.users.find((u) => u.id === userId);
+      if (user) {
+        user.isActive = true;
+      }
+    }
     for (const [userId, details] of Object.entries(activeUsersStore.userActiveDetails)) {
       const user = schema.users.find((u) => u.id === userId);
       if (user) {
@@ -969,6 +980,46 @@ router.post("/auth/register", async (req, res) => {
           isRead: false,
           createdAt: nowIso
         });
+        const todayBangla = getBangladeshDateString();
+        const isInitialFiveDaysOver = Boolean(
+          referrerUser.initialWorkUntil && todayBangla > referrerUser.initialWorkUntil
+        );
+        if (isInitialFiveDaysOver) {
+          referrerUser.referralsTowardsWork = (referrerUser.referralsTowardsWork || 0) + 1;
+          referrerUser.totalReferralsAfterInitial = (referrerUser.totalReferralsAfterInitial || 0) + 1;
+          if (referrerUser.referralsTowardsWork >= 5) {
+            referrerUser.referralsTowardsWork = 0;
+            let extensionDays = schema.settings.w1_days || 2;
+            if (referrerUser.category === "B") extensionDays = schema.settings.w2_days || 3;
+            else if (referrerUser.category === "C") extensionDays = schema.settings.w3_days || 4;
+            if (referrerUser.workUntil && referrerUser.workUntil >= todayBangla) {
+              referrerUser.workUntil = addDaysToBangladeshDate(referrerUser.workUntil, extensionDays);
+            } else {
+              referrerUser.workUntil = addDaysToBangladeshDate(todayBangla, extensionDays - 1);
+            }
+            schema.notifications.unshift({
+              id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              userId: referrerUser.id,
+              titleEn: `5 Referrals Completed! Work Unlocked for ${extensionDays} Days`,
+              titleBn: `\u09EB \u099C\u09A8 \u09B0\u09C7\u09AB\u09BE\u09B0 \u09B8\u09AE\u09CD\u09AA\u09A8\u09CD\u09A8! ${extensionDays} \u09A6\u09BF\u09A8\u09C7\u09B0 \u0995\u09BE\u099C \u099A\u09BE\u09B2\u09C1 \u09B9\u09DF\u09C7\u099B\u09C7`,
+              messageEn: `You completed 5 referrals! Your Category ${referrerUser.category || "A"} account has unlocked ${extensionDays} days of video tasks until ${referrerUser.workUntil}.`,
+              messageBn: `\u0985\u09AD\u09BF\u09A8\u09A8\u09CD\u09A6\u09A8! \u0986\u09AA\u09A8\u09BF \u09EB \u099C\u09A8 \u09B0\u09C7\u09AB\u09BE\u09B0 \u09B8\u09AE\u09CD\u09AA\u09A8\u09CD\u09A8 \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${referrerUser.category || "A"} \u0985\u09A8\u09C1\u09AF\u09BE\u09DF\u09C0 ${extensionDays} \u09A6\u09BF\u09A8 (${referrerUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4) \u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u099A\u09BE\u09B2\u09C1 \u09B9\u09DF\u09C7\u099B\u09C7!`,
+              type: "referral",
+              isRead: false,
+              createdAt: nowIso
+            });
+            schema.history.unshift({
+              id: `hist-unlock-${Date.now()}`,
+              userId: referrerUser.id,
+              type: "referral_active",
+              titleEn: `5 Referrals Goal Reached: +${extensionDays} Days Work Unlocked`,
+              titleBn: `\u09EB \u099C\u09A8 \u09B0\u09C7\u09AB\u09BE\u09B0 \u09B8\u09AE\u09CD\u09AA\u09A8\u09CD\u09A8: +${extensionDays} \u09A6\u09BF\u09A8 \u0995\u09BE\u099C \u0986\u09A8\u09B2\u0995 (${referrerUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4)`,
+              amount: 0,
+              status: "completed",
+              createdAt: nowIso
+            });
+          }
+        }
       }
       schema.notifications.unshift({
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1068,6 +1119,8 @@ router.get("/auth/me", requireUser, (req, res) => {
       workDaysRemaining = Math.max(0, Math.ceil(diffTime / (1e3 * 60 * 60 * 24)) + 1);
     }
   }
+  const isInitialFiveDays = Boolean(user.initialWorkUntil && today <= user.initialWorkUntil);
+  const referralsTowardsWork = user.referralsTowardsWork || 0;
   const { passwordHash: _, ...safeUser } = user;
   res.json({
     user: safeUser,
@@ -1077,7 +1130,11 @@ router.get("/auth/me", requireUser, (req, res) => {
     isWorkWindowOpen,
     workDaysRemaining,
     unreadNotifications,
-    todayBangladesh: today
+    todayBangladesh: today,
+    initialWorkUntil: user.initialWorkUntil || null,
+    referralsTowardsWork,
+    referralsNeededForUnlock: 5,
+    isInitialFiveDays
   });
 });
 router.get("/referral/lookup/:code", (req, res) => {
@@ -1265,11 +1322,20 @@ router.get("/videos", requireUser, (req, res) => {
     });
   }
   if (!user.workUntil || user.workUntil < today) {
+    let unlockDays = snapshot.settings.w1_days || 2;
+    if (user.category === "B") unlockDays = snapshot.settings.w2_days || 3;
+    else if (user.category === "C") unlockDays = snapshot.settings.w3_days || 4;
+    const referralsDone = user.referralsTowardsWork || 0;
+    const referralsNeeded = Math.max(0, 5 - referralsDone);
     return res.status(403).json({
       locked: true,
       reason: "WORK_WINDOW_EXPIRED",
-      messageEn: "Video work is locked. Refer someone and get their ID activated to continue. Category A opens 2 days, B 3 days, C 4 days.",
-      messageBn: "\u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u09AC\u09A8\u09CD\u09A7 \u0986\u099B\u09C7\u0964 \u0995\u09BE\u099C \u099A\u09BE\u09B2\u09BE\u09A4\u09C7 \u0986\u0997\u09C7 \u0995\u09BE\u0989\u0995\u09C7 \u099C\u09AF\u09BC\u09C7\u09A8 \u0995\u09B0\u09BE\u09A8 \u0993 \u09A4\u09BE\u09B0 \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09BE\u09A8\u0964 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF A \u09E8 \u09A6\u09BF\u09A8, B \u09E9 \u09A6\u09BF\u09A8, C \u09EA \u09A6\u09BF\u09A8 \u09B8\u09AE\u09DF \u09AC\u09BE\u09DC\u09BE\u09DF\u0964"
+      referralsDone,
+      referralsNeeded,
+      unlockDays,
+      category: user.category,
+      messageEn: `Your work period has expired. Refer 5 people to unlock ${unlockDays} days of work (Progress: ${referralsDone}/5).`,
+      messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09BE\u099C\u09C7\u09B0 \u09AE\u09C7\u09DF\u09BE\u09A6 \u09B6\u09C7\u09B7 \u09B9\u09DF\u09C7\u099B\u09C7\u0964 \u09AA\u09B0\u09AC\u09B0\u09CD\u09A4\u09C0 ${unlockDays} \u09A6\u09BF\u09A8 \u0995\u09BE\u099C \u099A\u09BE\u09B2\u09C1 \u0995\u09B0\u09A4\u09C7 \u09EB \u099C\u09A8 \u09A8\u09A4\u09C1\u09A8 \u09B0\u09C7\u09AB\u09BE\u09B0 \u0995\u09B0\u09C1\u09A8 (\u09AC\u09B0\u09CD\u09A4\u09AE\u09BE\u09A8 \u0985\u0997\u09CD\u09B0\u0997\u09A4\u09BF: ${referralsDone}/\u09EB)\u0964`
     });
   }
   const userSubmissions = snapshot.videoSubmissions.filter((vs) => vs.userId === user.id);
@@ -1298,7 +1364,10 @@ router.get("/videos", requireUser, (req, res) => {
     pendingRewards,
     isDailyLimitReached,
     watchSeconds: snapshot.settings.watch_seconds,
-    workUntil: user.workUntil
+    workUntil: user.workUntil,
+    initialWorkUntil: user.initialWorkUntil || null,
+    isInitialFiveDays: Boolean(user.initialWorkUntil && today <= user.initialWorkUntil),
+    referralsTowardsWork: user.referralsTowardsWork || 0
   });
 });
 router.post("/videos/start", requireActiveUser, async (req, res) => {
@@ -1464,7 +1533,11 @@ router.get("/referral", requireUser, (req, res) => {
       C: snapshot.settings.t3_bonus
     },
     joinBonus: snapshot.settings.ref_join,
-    activeBonus: snapshot.settings.ref_active
+    activeBonus: snapshot.settings.ref_active,
+    initialWorkUntil: user.initialWorkUntil || null,
+    isInitialFiveDays: Boolean(user.initialWorkUntil && getBangladeshDateString() <= user.initialWorkUntil),
+    referralsTowardsWork: user.referralsTowardsWork || 0,
+    referralsNeeded: Math.max(0, 5 - (user.referralsTowardsWork || 0))
   });
 });
 router.get("/team", requireUser, (req, res) => {
@@ -1722,14 +1795,17 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
       if (isFirstActivation) {
         targetUser.activatedAt = (/* @__PURE__ */ new Date()).toISOString();
         const initialDays = schema.settings.work_days || 5;
-        targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+        targetUser.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
+        targetUser.workUntil = targetUser.initialWorkUntil;
+        targetUser.referralsTowardsWork = 0;
+        targetUser.totalReferralsAfterInitial = 0;
         markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
         schema.history.unshift({
           id: `hist-act-app-${Date.now()}`,
           userId: targetUser.id,
           type: "activation_approved",
-          titleEn: `Category ${request.category} ID Activated! (Work open until ${targetUser.workUntil})`,
-          titleBn: `\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD\u09C7\u09B6\u09A8 \u09B8\u09AB\u09B2! (${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4 \u0995\u09BE\u099C \u099A\u09B2\u09AC\u09C7)`,
+          titleEn: `Category ${request.category} ID Activated! (5-day initial work until ${targetUser.workUntil})`,
+          titleBn: `\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD\u09C7\u09B6\u09A8 \u09B8\u09AB\u09B2! (\u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 ${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4 \u0995\u09BE\u099C \u099A\u09B2\u09AC\u09C7)`,
           amount: 0,
           status: "approved",
           createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -1739,8 +1815,8 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
           userId: targetUser.id,
           titleEn: "ID Activated Successfully!",
           titleBn: "\u0986\u09AA\u09A8\u09BE\u09B0 \u0986\u0987\u09A1\u09BF \u09B8\u0995\u09CD\u09B0\u09BF\u09AF\u09BC \u09B9\u09AF\u09BC\u09C7\u099B\u09C7!",
-          messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked!`,
-          messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u09B8\u09AB\u09B2\u09AD\u09BE\u09AC\u09C7 \u099A\u09BE\u09B2\u09C1 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964 \u098F\u0996\u09A8 \u09AA\u09CD\u09B0\u09A4\u09BF\u09A6\u09BF\u09A8 \u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u0995\u09B0\u09A4\u09C7 \u0993 \u0989\u0987\u09A5\u09A1\u09CD\u09B0 \u09A6\u09BF\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8!`,
+          messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked for the first 5 days (${targetUser.workUntil})!`,
+          messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u09B8\u09AB\u09B2\u09AD\u09BE\u09AC\u09C7 \u099A\u09BE\u09B2\u09C1 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964 \u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 (${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4) \u09AA\u09CD\u09B0\u09A4\u09BF\u09A6\u09BF\u09A8 \u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u0993 \u0989\u0987\u09A5\u09A1\u09CD\u09B0 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8!`,
           type: "activation",
           isRead: false,
           createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -1761,21 +1837,13 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
               status: "completed",
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
             });
-            let extensionDays = schema.settings.w1_days;
-            if (request.category === "B") extensionDays = schema.settings.w2_days;
-            if (request.category === "C") extensionDays = schema.settings.w3_days;
-            if (referrer.workUntil && referrer.workUntil >= today) {
-              referrer.workUntil = addDaysToBangladeshDate(referrer.workUntil, extensionDays);
-            } else {
-              referrer.workUntil = addDaysToBangladeshDate(today, extensionDays - 1);
-            }
             schema.notifications.unshift({
               id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               userId: referrer.id,
               titleEn: `Referral Activated! +\u09F3${activeBonus}`,
               titleBn: `\u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u09B9\u09DF\u09C7\u099B\u09C7! +\u09F3${activeBonus}`,
-              messageEn: `${targetUser.name} activated Category ${request.category}. You received +\u09F3${activeBonus} and your work window extended by ${extensionDays} days!`,
-              messageBn: `${targetUser.name} \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u0986\u09AA\u09A8\u09BF \u09AA\u09C7\u09B2\u09C7\u09A8 +\u09F3${activeBonus} \u098F\u09AC\u0982 \u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09BE\u099C\u09C7\u09B0 \u09AE\u09C7\u09DF\u09BE\u09A6 ${extensionDays} \u09A6\u09BF\u09A8 \u09AC\u09C3\u09A6\u09CD\u09A7\u09BF \u09AA\u09C7\u09DF\u09C7\u099B\u09C7!`,
+              messageEn: `${targetUser.name} activated Category ${request.category}. You received +\u09F3${activeBonus} bonus!`,
+              messageBn: `${targetUser.name} \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u0986\u09AA\u09A8\u09BF \u09AA\u09C7\u09B2\u09C7\u09A8 +\u09F3${activeBonus} \u09B0\u09C7\u09AB\u09BE\u09B0 \u09AC\u09CB\u09A8\u09BE\u09B8!`,
               type: "referral",
               isRead: false,
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -2267,6 +2335,45 @@ router.post("/admin/users/:id/block", async (req, res) => {
     res.json({ success: true, user: updated });
   } catch (err) {
     res.status(400).json({ error: err.message || "Block update failed" });
+  }
+});
+router.post("/admin/users/:id/activate", async (req, res) => {
+  const { id } = req.params;
+  const { category = "B" } = req.body;
+  const today = getBangladeshDateString();
+  try {
+    const updated = await db.withTransaction((schema) => {
+      let user = schema.users.find((u) => u.id === id);
+      if (!user) {
+        user = db.ensureUserExists({ id });
+      }
+      user.isActive = true;
+      user.category = category || user.category || "B";
+      user.activatedAt = user.activatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      const initialDays = schema.settings.work_days || 5;
+      user.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
+      user.workUntil = user.initialWorkUntil;
+      user.referralsTowardsWork = 0;
+      user.totalReferralsAfterInitial = 0;
+      user.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      markUserActiveInStore(user.id, user.category, user.workUntil, user.activatedAt);
+      schema.notifications.unshift({
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        userId: user.id,
+        titleEn: "Account Activated by Admin",
+        titleBn: "\u0985\u09CD\u09AF\u09BE\u09A1\u09AE\u09BF\u09A8 \u0986\u09AA\u09A8\u09BE\u09B0 \u0985\u09CD\u09AF\u09BE\u0995\u09BE\u0989\u09A8\u09CD\u099F \u09B8\u0995\u09CD\u09B0\u09BF\u09AF\u09BC \u0995\u09B0\u09C7\u099B\u09C7\u09A8",
+        messageEn: `Your Category ${user.category} ID has been activated by admin with 5 days of work.`,
+        messageBn: `\u0985\u09CD\u09AF\u09BE\u09A1\u09AE\u09BF\u09A8 \u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${user.category} \u0986\u0987\u09A1\u09BF \u09B8\u0995\u09CD\u09B0\u09BF\u09AF\u09BC \u0995\u09B0\u09C7\u099B\u09C7\u09A8 (\u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 \u0995\u09BE\u099C \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8)\u0964`,
+        type: "activation",
+        isRead: false,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      const { passwordHash: _, ...safe } = user;
+      return safe;
+    });
+    res.json({ success: true, user: updated });
+  } catch (err) {
+    res.status(400).json({ error: err.message || "Activation failed" });
   }
 });
 router.get("/admin/settings", (req, res) => {

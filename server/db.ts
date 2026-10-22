@@ -181,6 +181,12 @@ class DatabaseManager {
 
   public mergeActiveUsers(schema: DatabaseSchema): void {
     if (!schema || !Array.isArray(schema.users)) return;
+    for (const userId of activeUsersStore.activeUserIds) {
+      const user = schema.users.find((u) => u.id === userId);
+      if (user) {
+        user.isActive = true;
+      }
+    }
     for (const [userId, details] of Object.entries(activeUsersStore.userActiveDetails)) {
       const user = schema.users.find((u) => u.id === userId);
       if (user) {

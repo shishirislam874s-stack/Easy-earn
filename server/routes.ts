@@ -233,6 +233,57 @@ router.post('/auth/register', async (req: Request, res: Response) => {
           isRead: false,
           createdAt: nowIso,
         });
+
+        // Check if referrer's initial 5 days are over
+        const todayBangla = getBangladeshDateString();
+        const isInitialFiveDaysOver = Boolean(
+          referrerUser.initialWorkUntil && todayBangla > referrerUser.initialWorkUntil
+        );
+
+        // Referrals made during initial 5 days are NOT counted towards work days
+        if (isInitialFiveDaysOver) {
+          referrerUser.referralsTowardsWork = (referrerUser.referralsTowardsWork || 0) + 1;
+          referrerUser.totalReferralsAfterInitial = (referrerUser.totalReferralsAfterInitial || 0) + 1;
+
+          // When referrer reaches 5 referrals after initial period, unlock work
+          if (referrerUser.referralsTowardsWork >= 5) {
+            referrerUser.referralsTowardsWork = 0; // reset for next cycle
+
+            // Cat A = 2 days (w1_days), Cat B = 3 days (w2_days), Cat C = 4 days (w3_days)
+            let extensionDays = schema.settings.w1_days || 2;
+            if (referrerUser.category === 'B') extensionDays = schema.settings.w2_days || 3;
+            else if (referrerUser.category === 'C') extensionDays = schema.settings.w3_days || 4;
+
+            if (referrerUser.workUntil && referrerUser.workUntil >= todayBangla) {
+              referrerUser.workUntil = addDaysToBangladeshDate(referrerUser.workUntil, extensionDays);
+            } else {
+              referrerUser.workUntil = addDaysToBangladeshDate(todayBangla, extensionDays - 1);
+            }
+
+            schema.notifications.unshift({
+              id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              userId: referrerUser.id,
+              titleEn: `5 Referrals Completed! Work Unlocked for ${extensionDays} Days`,
+              titleBn: `৫ জন রেফার সম্পন্ন! ${extensionDays} দিনের কাজ চালু হয়েছে`,
+              messageEn: `You completed 5 referrals! Your Category ${referrerUser.category || 'A'} account has unlocked ${extensionDays} days of video tasks until ${referrerUser.workUntil}.`,
+              messageBn: `অভিনন্দন! আপনি ৫ জন রেফার সম্পন্ন করেছেন। আপনার ক্যাটাগরি ${referrerUser.category || 'A'} অনুযায়ী ${extensionDays} দিন (${referrerUser.workUntil} পর্যন্ত) ভিডিও কাজ চালু হয়েছে!`,
+              type: 'referral',
+              isRead: false,
+              createdAt: nowIso,
+            });
+
+            schema.history.unshift({
+              id: `hist-unlock-${Date.now()}`,
+              userId: referrerUser.id,
+              type: 'referral_active',
+              titleEn: `5 Referrals Goal Reached: +${extensionDays} Days Work Unlocked`,
+              titleBn: `৫ জন রেফার সম্পন্ন: +${extensionDays} দিন কাজ আনলক (${referrerUser.workUntil} পর্যন্ত)`,
+              amount: 0,
+              status: 'completed',
+              createdAt: nowIso,
+            });
+          }
+        }
       }
 
       // Add welcome notification to new user
@@ -359,6 +410,9 @@ router.get('/auth/me', requireUser, (req: AuthenticatedRequest, res: Response) =
     }
   }
 
+  const isInitialFiveDays = Boolean(user.initialWorkUntil && today <= user.initialWorkUntil);
+  const referralsTowardsWork = user.referralsTowardsWork || 0;
+
   const { passwordHash: _, ...safeUser } = user;
   res.json({
     user: safeUser,
@@ -369,6 +423,10 @@ router.get('/auth/me', requireUser, (req: AuthenticatedRequest, res: Response) =
     workDaysRemaining,
     unreadNotifications,
     todayBangladesh: today,
+    initialWorkUntil: user.initialWorkUntil || null,
+    referralsTowardsWork,
+    referralsNeededForUnlock: 5,
+    isInitialFiveDays,
   });
 });
 
@@ -606,11 +664,22 @@ router.get('/videos', requireUser, (req: AuthenticatedRequest, res: Response) =>
 
   // If work window has expired, lock video work
   if (!user.workUntil || user.workUntil < today) {
+    let unlockDays = snapshot.settings.w1_days || 2;
+    if (user.category === 'B') unlockDays = snapshot.settings.w2_days || 3;
+    else if (user.category === 'C') unlockDays = snapshot.settings.w3_days || 4;
+
+    const referralsDone = user.referralsTowardsWork || 0;
+    const referralsNeeded = Math.max(0, 5 - referralsDone);
+
     return res.status(403).json({
       locked: true,
       reason: 'WORK_WINDOW_EXPIRED',
-      messageEn: 'Video work is locked. Refer someone and get their ID activated to continue. Category A opens 2 days, B 3 days, C 4 days.',
-      messageBn: 'ভিডিও কাজ বন্ধ আছে। কাজ চালাতে আগে কাউকে জয়েন করান ও তার আইডি অ্যাক্টিভ করান। ক্যাটাগরি A ২ দিন, B ৩ দিন, C ৪ দিন সময় বাড়ায়।',
+      referralsDone,
+      referralsNeeded,
+      unlockDays,
+      category: user.category,
+      messageEn: `Your work period has expired. Refer 5 people to unlock ${unlockDays} days of work (Progress: ${referralsDone}/5).`,
+      messageBn: `আপনার কাজের মেয়াদ শেষ হয়েছে। পরবর্তী ${unlockDays} দিন কাজ চালু করতে ৫ জন নতুন রেফার করুন (বর্তমান অগ্রগতি: ${referralsDone}/৫)।`,
     });
   }
 
@@ -651,6 +720,9 @@ router.get('/videos', requireUser, (req: AuthenticatedRequest, res: Response) =>
     isDailyLimitReached,
     watchSeconds: snapshot.settings.watch_seconds,
     workUntil: user.workUntil,
+    initialWorkUntil: user.initialWorkUntil || null,
+    isInitialFiveDays: Boolean(user.initialWorkUntil && today <= user.initialWorkUntil),
+    referralsTowardsWork: user.referralsTowardsWork || 0,
   });
 });
 
@@ -870,6 +942,10 @@ router.get('/referral', requireUser, (req: AuthenticatedRequest, res: Response) 
     },
     joinBonus: snapshot.settings.ref_join,
     activeBonus: snapshot.settings.ref_active,
+    initialWorkUntil: user.initialWorkUntil || null,
+    isInitialFiveDays: Boolean(user.initialWorkUntil && getBangladeshDateString() <= user.initialWorkUntil),
+    referralsTowardsWork: user.referralsTowardsWork || 0,
+    referralsNeeded: Math.max(0, 5 - (user.referralsTowardsWork || 0)),
   });
 });
 
@@ -1221,9 +1297,12 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
 
       if (isFirstActivation) {
         targetUser.activatedAt = new Date().toISOString();
-        // 5d) Set work_until = today + (work_days - 1)
+        // Initial 5 days work window: user works exactly 5 days
         const initialDays = schema.settings.work_days || 5;
-        targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+        targetUser.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
+        targetUser.workUntil = targetUser.initialWorkUntil;
+        targetUser.referralsTowardsWork = 0;
+        targetUser.totalReferralsAfterInitial = 0;
 
         // Permanently record in active users store
         markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
@@ -1233,8 +1312,8 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
           id: `hist-act-app-${Date.now()}`,
           userId: targetUser.id,
           type: 'activation_approved',
-          titleEn: `Category ${request.category} ID Activated! (Work open until ${targetUser.workUntil})`,
-          titleBn: `ক্যাটাগরি ${request.category} আইডি অ্যাক্টিভেশন সফল! (${targetUser.workUntil} পর্যন্ত কাজ চলবে)`,
+          titleEn: `Category ${request.category} ID Activated! (5-day initial work until ${targetUser.workUntil})`,
+          titleBn: `ক্যাটাগরি ${request.category} আইডি অ্যাক্টিভেশন সফল! (প্রাথমিক ৫ দিন ${targetUser.workUntil} পর্যন্ত কাজ চলবে)`,
           amount: 0,
           status: 'approved',
           createdAt: new Date().toISOString(),
@@ -1246,8 +1325,8 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
           userId: targetUser.id,
           titleEn: 'ID Activated Successfully!',
           titleBn: 'আপনার আইডি সক্রিয় হয়েছে!',
-          messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked!`,
-          messageBn: `আপনার ক্যাটাগরি ${request.category} আইডি সফলভাবে চালু হয়েছে। এখন প্রতিদিন ভিডিও কাজ করতে ও উইথড্র দিতে পারবেন!`,
+          messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked for the first 5 days (${targetUser.workUntil})!`,
+          messageBn: `আপনার ক্যাটাগরি ${request.category} আইডি সফলভাবে চালু হয়েছে। প্রাথমিক ৫ দিন (${targetUser.workUntil} পর্যন্ত) প্রতিদিন ভিডিও কাজ ও উইথড্র করতে পারবেন!`,
           type: 'activation',
           isRead: false,
           createdAt: new Date().toISOString(),
@@ -1273,26 +1352,13 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
               createdAt: new Date().toISOString(),
             });
 
-            // (2) Referrer's work_until extension
-            let extensionDays = schema.settings.w1_days;
-            if (request.category === 'B') extensionDays = schema.settings.w2_days;
-            if (request.category === 'C') extensionDays = schema.settings.w3_days;
-
-            if (referrer.workUntil && referrer.workUntil >= today) {
-              // Still open, add after work_until
-              referrer.workUntil = addDaysToBangladeshDate(referrer.workUntil, extensionDays);
-            } else {
-              // Ended or unset, start from today
-              referrer.workUntil = addDaysToBangladeshDate(today, extensionDays - 1);
-            }
-
             schema.notifications.unshift({
               id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               userId: referrer.id,
               titleEn: `Referral Activated! +৳${activeBonus}`,
               titleBn: `রেফারাল আইডি অ্যাক্টিভ হয়েছে! +৳${activeBonus}`,
-              messageEn: `${targetUser.name} activated Category ${request.category}. You received +৳${activeBonus} and your work window extended by ${extensionDays} days!`,
-              messageBn: `${targetUser.name} ক্যাটাগরি ${request.category} অ্যাক্টিভ করেছেন। আপনি পেলেন +৳${activeBonus} এবং আপনার কাজের মেয়াদ ${extensionDays} দিন বৃদ্ধি পেয়েছে!`,
+              messageEn: `${targetUser.name} activated Category ${request.category}. You received +৳${activeBonus} bonus!`,
+              messageBn: `${targetUser.name} ক্যাটাগরি ${request.category} অ্যাক্টিভ করেছেন। আপনি পেলেন +৳${activeBonus} রেফার বোনাস!`,
               type: 'referral',
               isRead: false,
               createdAt: new Date().toISOString(),
@@ -1914,6 +1980,53 @@ router.post('/admin/users/:id/block', async (req: Request, res: Response) => {
     res.json({ success: true, user: updated });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Block update failed' });
+  }
+});
+
+// Admin activate user directly (1-click from user management)
+router.post('/admin/users/:id/activate', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { category = 'B' } = req.body;
+  const today = getBangladeshDateString();
+
+  try {
+    const updated = await db.withTransaction((schema) => {
+      let user = schema.users.find((u) => u.id === id);
+      if (!user) {
+        user = db.ensureUserExists({ id });
+      }
+
+      user.isActive = true;
+      user.category = (category || user.category || 'B') as CategoryType;
+      user.activatedAt = user.activatedAt || new Date().toISOString();
+      const initialDays = schema.settings.work_days || 5;
+      user.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
+      user.workUntil = user.initialWorkUntil;
+      user.referralsTowardsWork = 0;
+      user.totalReferralsAfterInitial = 0;
+      user.updatedAt = new Date().toISOString();
+
+      markUserActiveInStore(user.id, user.category, user.workUntil, user.activatedAt);
+
+      schema.notifications.unshift({
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        userId: user.id,
+        titleEn: 'Account Activated by Admin',
+        titleBn: 'অ্যাডমিন আপনার অ্যাকাউন্ট সক্রিয় করেছেন',
+        messageEn: `Your Category ${user.category} ID has been activated by admin with 5 days of work.`,
+        messageBn: `অ্যাডমিন আপনার ক্যাটাগরি ${user.category} আইডি সক্রিয় করেছেন (প্রাথমিক ৫ দিন কাজ করতে পারবেন)।`,
+        type: 'activation',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+
+      const { passwordHash: _, ...safe } = user;
+      return safe;
+    });
+
+    res.json({ success: true, user: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Activation failed' });
   }
 });
 

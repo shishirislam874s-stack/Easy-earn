@@ -28,6 +28,9 @@ interface AuthContextType {
   isWorkWindowOpen: boolean;
   workDaysRemaining: number;
   unreadNotifications: number;
+  initialWorkUntil: string | null;
+  referralsTowardsWork: number;
+  isInitialFiveDays: boolean;
   config: AppConfig | null;
   referredByName: string | null;
   toastMessage: string | null;
@@ -86,6 +89,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isWorkWindowOpen, setIsWorkWindowOpen] = useState(false);
   const [workDaysRemaining, setWorkDaysRemaining] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [initialWorkUntil, setInitialWorkUntil] = useState<string | null>(null);
+  const [referralsTowardsWork, setReferralsTowardsWork] = useState(0);
+  const [isInitialFiveDays, setIsInitialFiveDays] = useState(false);
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [referredByName, setReferredByName] = useState<string | null>(null);
@@ -177,6 +183,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsWorkWindowOpen(Boolean(data.isWorkWindowOpen));
         setWorkDaysRemaining(data.workDaysRemaining || 0);
         setUnreadNotifications(data.unreadNotifications || 0);
+        setInitialWorkUntil(data.initialWorkUntil || data.user?.initialWorkUntil || null);
+        setReferralsTowardsWork(data.referralsTowardsWork ?? data.user?.referralsTowardsWork ?? 0);
+        setIsInitialFiveDays(Boolean(data.isInitialFiveDays));
       } else if (res.status === 401) {
         removeAuthToken();
         setUser(null);
@@ -322,6 +331,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isWorkWindowOpen,
         workDaysRemaining,
         unreadNotifications,
+        initialWorkUntil,
+        referralsTowardsWork,
+        isInitialFiveDays,
         config,
         referredByName,
         toastMessage,

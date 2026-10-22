@@ -13,6 +13,9 @@ export interface UserProfile {
   referredBy: string | null;
   referralCode: string;
   workUntil: string | null;
+  initialWorkUntil?: string | null;
+  referralsTowardsWork?: number;
+  totalReferralsAfterInitial?: number;
   isTeamLeader: boolean;
   activatedAt: string | null;
   createdAt: string;

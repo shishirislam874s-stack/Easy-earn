@@ -177,7 +177,16 @@ export function AdminPanelView() {
       const res = await adminFetch(`/api/admin/users?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setUsersList(data.users || []);
+        const users = data.users || [];
+        setUsersList(users);
+
+        // Auto-persist active users to localStorage so refresh never loses activation
+        try {
+          const activeIds = users.filter((u: any) => u.isActive).map((u: any) => u.id);
+          const saved: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+          const combined = Array.from(new Set([...saved, ...activeIds]));
+          localStorage.setItem('earn_approved_users', JSON.stringify(combined));
+        } catch {}
       }
     } catch {}
   };
@@ -498,6 +507,45 @@ export function AdminPanelView() {
         fetchUsers();
       }
     } catch {}
+  };
+
+  const handleDirectActivateUser = async (u: any) => {
+    if (processingIds.has(u.id)) return;
+    setProcessingIds((prev) => new Set([...prev, u.id]));
+
+    // 1-Click optimistic response
+    showToast(language === 'bn' ? `${u.name}-এর আইডি সফলভাবে সক্রিয় হয়েছে!` : `User ${u.name} activated!`);
+
+    setUsersList((prev) =>
+      prev.map((item) => (item.id === u.id ? { ...item, isActive: true, category: item.category || 'B' } : item))
+    );
+
+    // Save in localStorage immediately
+    try {
+      const saved: string[] = JSON.parse(localStorage.getItem('earn_approved_users') || '[]');
+      if (!saved.includes(u.id)) {
+        saved.push(u.id);
+        localStorage.setItem('earn_approved_users', JSON.stringify(saved));
+      }
+    } catch {}
+
+    try {
+      await adminFetch(`/api/admin/users/${u.id}/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: u.category || 'B' }),
+      });
+    } catch (err) {
+      console.error('Direct activate failed:', err);
+    } finally {
+      setProcessingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(u.id);
+        return next;
+      });
+      fetchStats();
+      fetchUsers();
+    }
   };
 
   const handleViewUserHistory = async (u: any) => {
@@ -1349,6 +1397,15 @@ export function AdminPanelView() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold text-white">{u.name}</span>
                     <span className="text-xs text-slate-400 font-mono">({u.phone})</span>
+                    {u.isActive ? (
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                        Inactive
+                      </span>
+                    )}
                     {u.isTeamLeader && (
                       <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/40">
                         Team Leader
@@ -1368,10 +1425,25 @@ export function AdminPanelView() {
                     <span>Direct Active: {u.activatedReferralCount}</span>
                     <span>·</span>
                     <span className="text-slate-400 text-[11px]">Work Until: {u.workUntil || 'None'}</span>
+                    {u.referralsTowardsWork !== undefined && (
+                      <>
+                        <span>·</span>
+                        <span className="text-amber-300 text-[11px] font-semibold">Ref Progress: {u.referralsTowardsWork}/5</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {!u.isActive && (
+                    <button
+                      disabled={processingIds.has(u.id)}
+                      onClick={() => handleDirectActivateUser(u)}
+                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold border border-emerald-400/40 cursor-pointer disabled:opacity-50"
+                    >
+                      {processingIds.has(u.id) ? 'Activating...' : 'Activate ID'}
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setBalanceModalUser(u);
