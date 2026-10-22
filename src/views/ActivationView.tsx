@@ -14,15 +14,55 @@ export function ActivationView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState(false);
-  const [latestRequest, setLatestRequest] = useState<any>(null);
+  const [latestRequest, setLatestRequest] = useState<any>(() => {
+    try {
+      const savedUserStr = localStorage.getItem('earn_saved_user');
+      const uid = savedUserStr ? JSON.parse(savedUserStr)?.id : null;
+      if (uid) {
+        const saved = localStorage.getItem(`earn_pending_act_${uid}`);
+        return saved ? JSON.parse(saved) : null;
+      }
+    } catch {}
+    return null;
+  });
   const [copiedNumber, setCopiedNumber] = useState<string | null>(null);
 
   const fetchStatus = async () => {
     try {
+      // Sync locally cached pending request with server to prevent loss on reload
+      if (user?.id) {
+        const localSaved = localStorage.getItem(`earn_pending_act_${user.id}`);
+        if (localSaved) {
+          try {
+            const parsed = JSON.parse(localSaved);
+            if (parsed && parsed.status === 'pending') {
+              authFetch('/api/activation/sync-pending', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ request: parsed }),
+              }).catch(() => {});
+            }
+          } catch {}
+        }
+      }
+
       const res = await authFetch('/api/activation/status');
       if (res.ok) {
         const data = await res.json();
-        setLatestRequest(data.latestRequest);
+        if (data.latestRequest) {
+          setLatestRequest(data.latestRequest);
+          if (user?.id) {
+            if (data.latestRequest.status === 'approved' || data.isActive) {
+              localStorage.removeItem(`earn_pending_act_${user.id}`);
+            } else {
+              localStorage.setItem(`earn_pending_act_${user.id}`, JSON.stringify(data.latestRequest));
+            }
+          }
+        }
+        if (data.isActive && !user?.isActive) {
+          await refreshUserData();
+          showToast(language === 'bn' ? 'অভিনন্দন! আপনার আইডি সক্রিয় হয়েছে!' : 'Congratulations! Your ID has been activated!');
+        }
       }
     } catch {}
   };
@@ -30,7 +70,16 @@ export function ActivationView() {
   useEffect(() => {
     fetchStatus();
     refreshConfig();
-  }, []);
+
+    // Fast polling while user is waiting for activation approval
+    if (user?.isActive) return;
+    const interval = setInterval(() => {
+      fetchStatus();
+      refreshUserData();
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [user?.isActive, user?.id]);
 
   const handleCopy = (num: string) => {
     navigator.clipboard.writeText(num);
@@ -70,8 +119,20 @@ export function ActivationView() {
           setError(data.error || 'Activation request failed');
         }
       } else {
+        const submitted = data.request || {
+          category: selectedCategory,
+          paymentMethod: selectedMethod,
+          transactionId: transactionId.trim(),
+          amount: selectedCatObj.fee,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
         setSuccessNotice(true);
+        setLatestRequest(submitted);
         setTransactionId('');
+        if (user?.id) {
+          localStorage.setItem(`earn_pending_act_${user.id}`, JSON.stringify(submitted));
+        }
         await fetchStatus();
         await refreshUserData();
         showToast(language === 'bn' ? 'আবেদন সফলভাবে পাঠানো হয়েছে!' : 'Request submitted successfully!');

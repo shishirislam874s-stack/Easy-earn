@@ -3,6 +3,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import seedDatabase from '../data/db.json';
 import seedActiveUsers from '../data/active_users.json';
+import seedActivationRequests from '../data/activation_requests.json';
 import {
   User,
   Video,
@@ -41,6 +42,7 @@ const DATA_DIR = isServerless
   : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.resolve(DATA_DIR, 'db.json');
 const ACTIVE_USERS_FILE = path.resolve(DATA_DIR, 'active_users.json');
+const ACTIVATION_REQUESTS_FILE = path.resolve(DATA_DIR, 'activation_requests.json');
 
 interface ActiveUsersRecord {
   activeUserIds: string[];
@@ -57,6 +59,8 @@ export const activeUsersStore: ActiveUsersRecord = {
     '1002': { isActive: true, category: 'B', workUntil: '2026-10-30' },
   },
 };
+
+export const activationRequestsStore: ActivationRequest[] = [];
 
 function initActiveUsersStore() {
   try {
@@ -85,7 +89,47 @@ function initActiveUsersStore() {
   }
 }
 
+function initActivationRequestsStore() {
+  try {
+    if (Array.isArray(seedActivationRequests)) {
+      activationRequestsStore.push(...seedActivationRequests);
+    }
+    if (fs.existsSync(ACTIVATION_REQUESTS_FILE)) {
+      const content = fs.readFileSync(ACTIVATION_REQUESTS_FILE, 'utf-8');
+      const data = JSON.parse(content);
+      if (Array.isArray(data)) {
+        for (const req of data) {
+          if (!activationRequestsStore.some((r) => r.id === req.id || r.transactionId === req.transactionId)) {
+            activationRequestsStore.push(req);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to init activation requests store:', err);
+  }
+}
+
 initActiveUsersStore();
+initActivationRequestsStore();
+
+export function saveActivationRequestToStore(req: ActivationRequest) {
+  const existingIdx = activationRequestsStore.findIndex((r) => r.id === req.id || r.transactionId === req.transactionId);
+  if (existingIdx >= 0) {
+    activationRequestsStore[existingIdx] = { ...activationRequestsStore[existingIdx], ...req };
+  } else {
+    activationRequestsStore.unshift(req);
+  }
+
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ACTIVATION_REQUESTS_FILE, JSON.stringify(activationRequestsStore, null, 2), 'utf-8');
+    const localRepoFile = path.resolve(process.cwd(), 'data', 'activation_requests.json');
+    if (fs.existsSync(path.dirname(localRepoFile))) {
+      fs.writeFileSync(localRepoFile, JSON.stringify(activationRequestsStore, null, 2), 'utf-8');
+    }
+  } catch {}
+}
 
 export function markUserActiveInStore(
   userId: string,
@@ -162,6 +206,7 @@ class DatabaseManager {
         // Ensure defaults are merged
         parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
         this.mergeActiveUsers(parsed);
+        this.mergeActivationRequests(parsed);
         return parsed;
       }
     } catch (err) {
@@ -173,9 +218,24 @@ class DatabaseManager {
       const fallback = JSON.parse(JSON.stringify(seedDatabase));
       fallback.settings = { ...DEFAULT_SETTINGS, ...(fallback.settings || {}) };
       this.mergeActiveUsers(fallback);
+      this.mergeActivationRequests(fallback);
       return fallback as DatabaseSchema;
     } catch {
       return this.createInitialData();
+    }
+  }
+
+  public mergeActivationRequests(schema: DatabaseSchema): void {
+    if (!schema || !Array.isArray(schema.activationRequests)) return;
+    for (const req of activationRequestsStore) {
+      const idx = schema.activationRequests.findIndex((r) => r.id === req.id || r.transactionId === req.transactionId);
+      if (idx >= 0) {
+        if (req.status === 'approved' && schema.activationRequests[idx].status !== 'approved') {
+          schema.activationRequests[idx] = req;
+        }
+      } else {
+        schema.activationRequests.unshift(req);
+      }
     }
   }
 

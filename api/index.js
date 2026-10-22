@@ -156,11 +156,15 @@ var active_users_default = {
   }
 };
 
+// data/activation_requests.json
+var activation_requests_default = [];
+
 // server/db.ts
 var isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
 var DATA_DIR = isServerless ? path.resolve("/tmp", "earn_app_data") : path.resolve(process.cwd(), "data");
 var DB_FILE = path.resolve(DATA_DIR, "db.json");
 var ACTIVE_USERS_FILE = path.resolve(DATA_DIR, "active_users.json");
+var ACTIVATION_REQUESTS_FILE = path.resolve(DATA_DIR, "activation_requests.json");
 var activeUsersStore = {
   activeUserIds: ["1001", "1002"],
   userActiveDetails: {
@@ -168,6 +172,7 @@ var activeUsersStore = {
     "1002": { isActive: true, category: "B", workUntil: "2026-10-30" }
   }
 };
+var activationRequestsStore = [];
 function initActiveUsersStore() {
   try {
     if (active_users_default && typeof active_users_default === "object") {
@@ -193,7 +198,45 @@ function initActiveUsersStore() {
     console.error("Failed to init active users store:", err);
   }
 }
+function initActivationRequestsStore() {
+  try {
+    if (Array.isArray(activation_requests_default)) {
+      activationRequestsStore.push(...activation_requests_default);
+    }
+    if (fs.existsSync(ACTIVATION_REQUESTS_FILE)) {
+      const content = fs.readFileSync(ACTIVATION_REQUESTS_FILE, "utf-8");
+      const data = JSON.parse(content);
+      if (Array.isArray(data)) {
+        for (const req of data) {
+          if (!activationRequestsStore.some((r) => r.id === req.id || r.transactionId === req.transactionId)) {
+            activationRequestsStore.push(req);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Failed to init activation requests store:", err);
+  }
+}
 initActiveUsersStore();
+initActivationRequestsStore();
+function saveActivationRequestToStore(req) {
+  const existingIdx = activationRequestsStore.findIndex((r) => r.id === req.id || r.transactionId === req.transactionId);
+  if (existingIdx >= 0) {
+    activationRequestsStore[existingIdx] = { ...activationRequestsStore[existingIdx], ...req };
+  } else {
+    activationRequestsStore.unshift(req);
+  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ACTIVATION_REQUESTS_FILE, JSON.stringify(activationRequestsStore, null, 2), "utf-8");
+    const localRepoFile = path.resolve(process.cwd(), "data", "activation_requests.json");
+    if (fs.existsSync(path.dirname(localRepoFile))) {
+      fs.writeFileSync(localRepoFile, JSON.stringify(activationRequestsStore, null, 2), "utf-8");
+    }
+  } catch {
+  }
+}
 function markUserActiveInStore(userId, category = "B", workUntil, activatedAt) {
   if (!activeUsersStore.activeUserIds.includes(userId)) {
     activeUsersStore.activeUserIds.push(userId);
@@ -255,6 +298,7 @@ var DatabaseManager = class {
         const parsed = JSON.parse(raw);
         parsed.settings = { ...DEFAULT_SETTINGS, ...parsed.settings || {} };
         this.mergeActiveUsers(parsed);
+        this.mergeActivationRequests(parsed);
         return parsed;
       }
     } catch (err) {
@@ -264,9 +308,23 @@ var DatabaseManager = class {
       const fallback = JSON.parse(JSON.stringify(db_default));
       fallback.settings = { ...DEFAULT_SETTINGS, ...fallback.settings || {} };
       this.mergeActiveUsers(fallback);
+      this.mergeActivationRequests(fallback);
       return fallback;
     } catch {
       return this.createInitialData();
+    }
+  }
+  mergeActivationRequests(schema) {
+    if (!schema || !Array.isArray(schema.activationRequests)) return;
+    for (const req of activationRequestsStore) {
+      const idx = schema.activationRequests.findIndex((r) => r.id === req.id || r.transactionId === req.transactionId);
+      if (idx >= 0) {
+        if (req.status === "approved" && schema.activationRequests[idx].status !== "approved") {
+          schema.activationRequests[idx] = req;
+        }
+      } else {
+        schema.activationRequests.unshift(req);
+      }
     }
   }
   mergeActiveUsers(schema) {
@@ -1266,6 +1324,7 @@ router.post("/activation/request", async (req, res) => {
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       schema.activationRequests.unshift(newRequest);
+      saveActivationRequestToStore(newRequest);
       schema.history.unshift({
         id: `hist-act-${Date.now()}`,
         userId: user.id,
@@ -1301,13 +1360,40 @@ router.get("/activation/status", async (req, res) => {
     });
   }
   const snapshot = db.getSnapshot();
-  const userRequests = snapshot.activationRequests.filter((ar) => ar.userId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  let userRequests = snapshot.activationRequests.filter((ar) => ar.userId === user.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  if (userRequests.length === 0) {
+    const fromStore = activationRequestsStore.filter((ar) => ar.userId === user.id);
+    if (fromStore.length > 0) {
+      await db.withTransaction((schema) => {
+        for (const req2 of fromStore) {
+          if (!schema.activationRequests.some((r) => r.id === req2.id || r.transactionId === req2.transactionId)) {
+            schema.activationRequests.unshift(req2);
+          }
+        }
+      });
+      userRequests = fromStore.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+  }
   const latest = userRequests[0] || null;
   res.json({
     isActive: user.isActive,
     category: user.category,
+    workUntil: user.workUntil,
     latestRequest: latest
   });
+});
+router.post("/activation/sync-pending", async (req, res) => {
+  const { request } = req.body;
+  if (!request || !request.transactionId) return res.json({ synced: false });
+  await db.withTransaction((schema) => {
+    const cleanTrx = String(request.transactionId).trim().toUpperCase();
+    const exists = schema.activationRequests.find((r) => r.transactionId.toUpperCase() === cleanTrx);
+    if (!exists) {
+      schema.activationRequests.unshift(request);
+      saveActivationRequestToStore(request);
+    }
+  });
+  res.json({ synced: true });
 });
 router.get("/videos", requireUser, (req, res) => {
   const user = req.user;
@@ -1788,125 +1874,127 @@ router.post("/admin/activation/:id/approve", async (req, res) => {
           name: request.userName || "User"
         });
       }
-      const isFirstActivation = !targetUser.isActive;
       targetUser.isActive = true;
       targetUser.category = request.category;
-      targetUser.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-      if (isFirstActivation) {
-        targetUser.activatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        const initialDays = schema.settings.work_days || 5;
+      targetUser.activatedAt = targetUser.activatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      const initialDays = schema.settings.work_days || 5;
+      if (!targetUser.initialWorkUntil) {
         targetUser.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
-        targetUser.workUntil = targetUser.initialWorkUntil;
-        targetUser.referralsTowardsWork = 0;
-        targetUser.totalReferralsAfterInitial = 0;
-        markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
-        schema.history.unshift({
-          id: `hist-act-app-${Date.now()}`,
-          userId: targetUser.id,
-          type: "activation_approved",
-          titleEn: `Category ${request.category} ID Activated! (5-day initial work until ${targetUser.workUntil})`,
-          titleBn: `\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD\u09C7\u09B6\u09A8 \u09B8\u09AB\u09B2! (\u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 ${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4 \u0995\u09BE\u099C \u099A\u09B2\u09AC\u09C7)`,
-          amount: 0,
-          status: "approved",
-          createdAt: (/* @__PURE__ */ new Date()).toISOString()
-        });
-        schema.notifications.unshift({
-          id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          userId: targetUser.id,
-          titleEn: "ID Activated Successfully!",
-          titleBn: "\u0986\u09AA\u09A8\u09BE\u09B0 \u0986\u0987\u09A1\u09BF \u09B8\u0995\u09CD\u09B0\u09BF\u09AF\u09BC \u09B9\u09AF\u09BC\u09C7\u099B\u09C7!",
-          messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked for the first 5 days (${targetUser.workUntil})!`,
-          messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u09B8\u09AB\u09B2\u09AD\u09BE\u09AC\u09C7 \u099A\u09BE\u09B2\u09C1 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964 \u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 (${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4) \u09AA\u09CD\u09B0\u09A4\u09BF\u09A6\u09BF\u09A8 \u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u0993 \u0989\u0987\u09A5\u09A1\u09CD\u09B0 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8!`,
-          type: "activation",
-          isRead: false,
-          createdAt: (/* @__PURE__ */ new Date()).toISOString()
-        });
-        if (targetUser.referredBy) {
-          const referrer = schema.users.find((u) => u.id === targetUser.referredBy);
-          if (referrer) {
-            const activeBonus = schema.settings.ref_active || 100;
-            referrer.balance += activeBonus;
-            referrer.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-            schema.history.unshift({
-              id: `hist-ref-act-${Date.now()}`,
-              userId: referrer.id,
-              type: "referral_active",
-              titleEn: `Referral ID Activation Bonus (+\u09F3${activeBonus}) from ${targetUser.name}`,
-              titleBn: `${targetUser.name} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09BE\u09DF \u09AC\u09CB\u09A8\u09BE\u09B8 (+\u09F3${activeBonus})`,
-              amount: activeBonus,
-              status: "completed",
-              createdAt: (/* @__PURE__ */ new Date()).toISOString()
-            });
+      }
+      if (!targetUser.workUntil || targetUser.workUntil < today) {
+        targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+      }
+      targetUser.referralsTowardsWork = targetUser.referralsTowardsWork ?? 0;
+      targetUser.totalReferralsAfterInitial = targetUser.totalReferralsAfterInitial ?? 0;
+      targetUser.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
+      saveActivationRequestToStore(request);
+      schema.history.unshift({
+        id: `hist-act-app-${Date.now()}`,
+        userId: targetUser.id,
+        type: "activation_approved",
+        titleEn: `Category ${request.category} ID Activated! (5-day initial work until ${targetUser.workUntil})`,
+        titleBn: `\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD\u09C7\u09B6\u09A8 \u09B8\u09AB\u09B2! (\u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 ${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4 \u0995\u09BE\u099C \u099A\u09B2\u09AC\u09C7)`,
+        amount: 0,
+        status: "approved",
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      schema.notifications.unshift({
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        userId: targetUser.id,
+        titleEn: "ID Activated Successfully!",
+        titleBn: "\u0986\u09AA\u09A8\u09BE\u09B0 \u0986\u0987\u09A1\u09BF \u09B8\u0995\u09CD\u09B0\u09BF\u09AF\u09BC \u09B9\u09AF\u09BC\u09C7\u099B\u09C7!",
+        messageEn: `Your Category ${request.category} ID is now active. Daily video tasks and withdrawals are unlocked for the first 5 days (${targetUser.workUntil})!`,
+        messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0986\u0987\u09A1\u09BF \u09B8\u09AB\u09B2\u09AD\u09BE\u09AC\u09C7 \u099A\u09BE\u09B2\u09C1 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7\u0964 \u09AA\u09CD\u09B0\u09BE\u09A5\u09AE\u09BF\u0995 \u09EB \u09A6\u09BF\u09A8 (${targetUser.workUntil} \u09AA\u09B0\u09CD\u09AF\u09A8\u09CD\u09A4) \u09AA\u09CD\u09B0\u09A4\u09BF\u09A6\u09BF\u09A8 \u09AD\u09BF\u09A1\u09BF\u0993 \u0995\u09BE\u099C \u0993 \u0989\u0987\u09A5\u09A1\u09CD\u09B0 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8!`,
+        type: "activation",
+        isRead: false,
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      });
+      if (targetUser.referredBy) {
+        const referrer = schema.users.find((u) => u.id === targetUser.referredBy);
+        if (referrer) {
+          const activeBonus = schema.settings.ref_active || 100;
+          referrer.balance += activeBonus;
+          referrer.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          schema.history.unshift({
+            id: `hist-ref-act-${Date.now()}`,
+            userId: referrer.id,
+            type: "referral_active",
+            titleEn: `Referral ID Activation Bonus (+\u09F3${activeBonus}) from ${targetUser.name}`,
+            titleBn: `${targetUser.name} \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09BE\u09DF \u09AC\u09CB\u09A8\u09BE\u09B8 (+\u09F3${activeBonus})`,
+            amount: activeBonus,
+            status: "completed",
+            createdAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+          schema.notifications.unshift({
+            id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            userId: referrer.id,
+            titleEn: `Referral Activated! +\u09F3${activeBonus}`,
+            titleBn: `\u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u09B9\u09DF\u09C7\u099B\u09C7! +\u09F3${activeBonus}`,
+            messageEn: `${targetUser.name} activated Category ${request.category}. You received +\u09F3${activeBonus} bonus!`,
+            messageBn: `${targetUser.name} \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u0986\u09AA\u09A8\u09BF \u09AA\u09C7\u09B2\u09C7\u09A8 +\u09F3${activeBonus} \u09B0\u09C7\u09AB\u09BE\u09B0 \u09AC\u09CB\u09A8\u09BE\u09B8!`,
+            type: "referral",
+            isRead: false,
+            createdAt: (/* @__PURE__ */ new Date()).toISOString()
+          });
+          const directActiveCount = schema.users.filter(
+            (u) => u.referredBy === referrer.id && u.isActive
+          ).length;
+          if (directActiveCount >= schema.settings.team_size && !referrer.isTeamLeader) {
+            referrer.isTeamLeader = true;
             schema.notifications.unshift({
               id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               userId: referrer.id,
-              titleEn: `Referral Activated! +\u09F3${activeBonus}`,
-              titleBn: `\u09B0\u09C7\u09AB\u09BE\u09B0\u09BE\u09B2 \u0986\u0987\u09A1\u09BF \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u09B9\u09DF\u09C7\u099B\u09C7! +\u09F3${activeBonus}`,
-              messageEn: `${targetUser.name} activated Category ${request.category}. You received +\u09F3${activeBonus} bonus!`,
-              messageBn: `${targetUser.name} \u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category} \u0985\u09CD\u09AF\u09BE\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u0986\u09AA\u09A8\u09BF \u09AA\u09C7\u09B2\u09C7\u09A8 +\u09F3${activeBonus} \u09B0\u09C7\u09AB\u09BE\u09B0 \u09AC\u09CB\u09A8\u09BE\u09B8!`,
-              type: "referral",
+              titleEn: "Congratulations! You are now a Team Leader!",
+              titleBn: "\u0985\u09AD\u09BF\u09A8\u09A8\u09CD\u09A6\u09A8! \u0986\u09AA\u09A8\u09BF \u098F\u0996\u09A8 \u098F\u0995\u099C\u09A8 \u099F\u09BF\u09AE \u09B2\u09BF\u09A1\u09BE\u09B0!",
+              messageEn: `You have activated ${directActiveCount} members. You will now receive team bonuses whenever your members bring activated users!`,
+              messageBn: `\u0986\u09AA\u09A8\u09BF ${directActiveCount} \u099C\u09A8 \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u098F\u0996\u09A8 \u09A5\u09C7\u0995\u09C7 \u0986\u09AA\u09A8\u09BE\u09B0 \u099F\u09BF\u09AE\u09C7\u09B0 \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0\u09B0\u09BE \u0995\u09BE\u0989\u0995\u09C7 \u099C\u09DF\u09C7\u09A8 \u0995\u09B0\u09BE\u09B2\u09C7 \u0986\u09AA\u09A8\u09BF \u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 \u09AA\u09BE\u09AC\u09C7\u09A8!`,
+              type: "team",
               isRead: false,
               createdAt: (/* @__PURE__ */ new Date()).toISOString()
             });
-            const directActiveCount = schema.users.filter(
-              (u) => u.referredBy === referrer.id && u.isActive
-            ).length;
-            if (directActiveCount >= schema.settings.team_size && !referrer.isTeamLeader) {
-              referrer.isTeamLeader = true;
+          }
+          if (referrer.referredBy) {
+            const leader = schema.users.find((u) => u.id === referrer.referredBy);
+            if (leader && leader.isTeamLeader && leader.isActive) {
+              let teamBonusAmount = schema.settings.t1_bonus;
+              if (request.category === "B") teamBonusAmount = schema.settings.t2_bonus;
+              if (request.category === "C") teamBonusAmount = schema.settings.t3_bonus;
+              leader.balance += teamBonusAmount;
+              leader.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+              schema.teamBonuses.unshift({
+                id: `tb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                leaderId: leader.id,
+                leaderName: leader.name,
+                referrerId: referrer.id,
+                referrerName: referrer.name,
+                activatedUserId: targetUser.id,
+                activatedUserName: targetUser.name,
+                category: request.category,
+                amount: teamBonusAmount,
+                createdAt: (/* @__PURE__ */ new Date()).toISOString()
+              });
+              schema.history.unshift({
+                id: `hist-tb-${Date.now()}`,
+                userId: leader.id,
+                type: "team_bonus",
+                titleEn: `Team Bonus (+\u09F3${teamBonusAmount}) from member ${referrer.name} (activated ${targetUser.name})`,
+                titleBn: `\u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 (+\u09F3${teamBonusAmount}) \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 ${referrer.name}-\u098F\u09B0 \u09AE\u09BE\u09A7\u09CD\u09AF\u09AE\u09C7 (${targetUser.name})`,
+                amount: teamBonusAmount,
+                status: "completed",
+                createdAt: (/* @__PURE__ */ new Date()).toISOString()
+              });
               schema.notifications.unshift({
                 id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                userId: referrer.id,
-                titleEn: "Congratulations! You are now a Team Leader!",
-                titleBn: "\u0985\u09AD\u09BF\u09A8\u09A8\u09CD\u09A6\u09A8! \u0986\u09AA\u09A8\u09BF \u098F\u0996\u09A8 \u098F\u0995\u099C\u09A8 \u099F\u09BF\u09AE \u09B2\u09BF\u09A1\u09BE\u09B0!",
-                messageEn: `You have activated ${directActiveCount} members. You will now receive team bonuses whenever your members bring activated users!`,
-                messageBn: `\u0986\u09AA\u09A8\u09BF ${directActiveCount} \u099C\u09A8 \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964 \u098F\u0996\u09A8 \u09A5\u09C7\u0995\u09C7 \u0986\u09AA\u09A8\u09BE\u09B0 \u099F\u09BF\u09AE\u09C7\u09B0 \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0\u09B0\u09BE \u0995\u09BE\u0989\u0995\u09C7 \u099C\u09DF\u09C7\u09A8 \u0995\u09B0\u09BE\u09B2\u09C7 \u0986\u09AA\u09A8\u09BF \u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 \u09AA\u09BE\u09AC\u09C7\u09A8!`,
+                userId: leader.id,
+                titleEn: `Team Bonus Received (+\u09F3${teamBonusAmount})!`,
+                titleBn: `\u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 \u09AA\u09C7\u09DF\u09C7\u099B\u09C7\u09A8 (+\u09F3${teamBonusAmount})!`,
+                messageEn: `Your team member ${referrer.name} activated ${targetUser.name} (Cat ${request.category}).`,
+                messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u099F\u09BF\u09AE \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 ${referrer.name} \u09A8\u09A4\u09C1\u09A8 \u09B8\u09A6\u09B8\u09CD\u09AF ${targetUser.name} (\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category}) \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964`,
                 type: "team",
                 isRead: false,
                 createdAt: (/* @__PURE__ */ new Date()).toISOString()
               });
-            }
-            if (referrer.referredBy) {
-              const leader = schema.users.find((u) => u.id === referrer.referredBy);
-              if (leader && leader.isTeamLeader && leader.isActive) {
-                let teamBonusAmount = schema.settings.t1_bonus;
-                if (request.category === "B") teamBonusAmount = schema.settings.t2_bonus;
-                if (request.category === "C") teamBonusAmount = schema.settings.t3_bonus;
-                leader.balance += teamBonusAmount;
-                leader.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-                schema.teamBonuses.unshift({
-                  id: `tb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  leaderId: leader.id,
-                  leaderName: leader.name,
-                  referrerId: referrer.id,
-                  referrerName: referrer.name,
-                  activatedUserId: targetUser.id,
-                  activatedUserName: targetUser.name,
-                  category: request.category,
-                  amount: teamBonusAmount,
-                  createdAt: (/* @__PURE__ */ new Date()).toISOString()
-                });
-                schema.history.unshift({
-                  id: `hist-tb-${Date.now()}`,
-                  userId: leader.id,
-                  type: "team_bonus",
-                  titleEn: `Team Bonus (+\u09F3${teamBonusAmount}) from member ${referrer.name} (activated ${targetUser.name})`,
-                  titleBn: `\u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 (+\u09F3${teamBonusAmount}) \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 ${referrer.name}-\u098F\u09B0 \u09AE\u09BE\u09A7\u09CD\u09AF\u09AE\u09C7 (${targetUser.name})`,
-                  amount: teamBonusAmount,
-                  status: "completed",
-                  createdAt: (/* @__PURE__ */ new Date()).toISOString()
-                });
-                schema.notifications.unshift({
-                  id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  userId: leader.id,
-                  titleEn: `Team Bonus Received (+\u09F3${teamBonusAmount})!`,
-                  titleBn: `\u099F\u09BF\u09AE \u09AC\u09CB\u09A8\u09BE\u09B8 \u09AA\u09C7\u09DF\u09C7\u099B\u09C7\u09A8 (+\u09F3${teamBonusAmount})!`,
-                  messageEn: `Your team member ${referrer.name} activated ${targetUser.name} (Cat ${request.category}).`,
-                  messageBn: `\u0986\u09AA\u09A8\u09BE\u09B0 \u099F\u09BF\u09AE \u09AE\u09C7\u09AE\u09CD\u09AC\u09BE\u09B0 ${referrer.name} \u09A8\u09A4\u09C1\u09A8 \u09B8\u09A6\u09B8\u09CD\u09AF ${targetUser.name} (\u0995\u09CD\u09AF\u09BE\u099F\u09BE\u0997\u09B0\u09BF ${request.category}) \u098F\u0995\u09CD\u099F\u09BF\u09AD \u0995\u09B0\u09C7\u099B\u09C7\u09A8\u0964`,
-                  type: "team",
-                  isRead: false,
-                  createdAt: (/* @__PURE__ */ new Date()).toISOString()
-                });
-              }
             }
           }
         }
@@ -1940,6 +2028,7 @@ router.post("/admin/activation/:id/reject", async (req, res) => {
         isRead: false,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       });
+      saveActivationRequestToStore(request);
       return request;
     });
     res.json({ success: true, request: updated });

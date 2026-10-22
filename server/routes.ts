@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { db, markUserActiveInStore } from './db';
+import { db, markUserActiveInStore, saveActivationRequestToStore, activationRequestsStore } from './db';
 import {
   createUserSession,
   createAdminSession,
@@ -588,6 +588,7 @@ router.post('/activation/request', async (req: AuthenticatedRequest, res: Respon
       };
 
       schema.activationRequests.unshift(newRequest);
+      saveActivationRequestToStore(newRequest);
 
       // Create history record
       schema.history.unshift({
@@ -631,17 +632,50 @@ router.get('/activation/status', async (req: AuthenticatedRequest, res: Response
 
   const snapshot = db.getSnapshot();
 
-  const userRequests = snapshot.activationRequests
+  let userRequests = snapshot.activationRequests
     .filter((ar) => ar.userId === user.id)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // Also check persistent store in case container refreshed
+  if (userRequests.length === 0) {
+    const fromStore = activationRequestsStore.filter((ar) => ar.userId === user.id);
+    if (fromStore.length > 0) {
+      await db.withTransaction((schema) => {
+        for (const req of fromStore) {
+          if (!schema.activationRequests.some((r) => r.id === req.id || r.transactionId === req.transactionId)) {
+            schema.activationRequests.unshift(req);
+          }
+        }
+      });
+      userRequests = fromStore.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+  }
 
   const latest = userRequests[0] || null;
 
   res.json({
     isActive: user.isActive,
     category: user.category,
+    workUntil: user.workUntil,
     latestRequest: latest,
   });
+});
+
+// Client sync for pending activation requests to prevent loss on reload
+router.post('/activation/sync-pending', async (req: AuthenticatedRequest, res: Response) => {
+  const { request } = req.body;
+  if (!request || !request.transactionId) return res.json({ synced: false });
+
+  await db.withTransaction((schema) => {
+    const cleanTrx = String(request.transactionId).trim().toUpperCase();
+    const exists = schema.activationRequests.find((r) => r.transactionId.toUpperCase() === cleanTrx);
+    if (!exists) {
+      schema.activationRequests.unshift(request);
+      saveActivationRequestToStore(request);
+    }
+  });
+
+  res.json({ synced: true });
 });
 
 // -------------------------------------------------------------
@@ -1290,22 +1324,23 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
         });
       }
 
-      const isFirstActivation = !targetUser.isActive;
       targetUser.isActive = true;
       targetUser.category = request.category;
+      targetUser.activatedAt = targetUser.activatedAt || new Date().toISOString();
+      const initialDays = schema.settings.work_days || 5;
+      if (!targetUser.initialWorkUntil) {
+        targetUser.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
+      }
+      if (!targetUser.workUntil || targetUser.workUntil < today) {
+        targetUser.workUntil = addDaysToBangladeshDate(today, initialDays - 1);
+      }
+      targetUser.referralsTowardsWork = targetUser.referralsTowardsWork ?? 0;
+      targetUser.totalReferralsAfterInitial = targetUser.totalReferralsAfterInitial ?? 0;
       targetUser.updatedAt = new Date().toISOString();
 
-      if (isFirstActivation) {
-        targetUser.activatedAt = new Date().toISOString();
-        // Initial 5 days work window: user works exactly 5 days
-        const initialDays = schema.settings.work_days || 5;
-        targetUser.initialWorkUntil = addDaysToBangladeshDate(today, initialDays - 1);
-        targetUser.workUntil = targetUser.initialWorkUntil;
-        targetUser.referralsTowardsWork = 0;
-        targetUser.totalReferralsAfterInitial = 0;
-
-        // Permanently record in active users store
-        markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
+      // ALWAYS permanently record in active users store & requests store
+      markUserActiveInStore(targetUser.id, targetUser.category, targetUser.workUntil, targetUser.activatedAt);
+      saveActivationRequestToStore(request);
 
         // Update history
         schema.history.unshift({
@@ -1439,7 +1474,6 @@ router.post('/admin/activation/:id/approve', async (req: Request, res: Response)
             }
           }
         }
-      }
 
       return request;
     });
@@ -1477,6 +1511,7 @@ router.post('/admin/activation/:id/reject', async (req: Request, res: Response) 
         createdAt: new Date().toISOString(),
       });
 
+      saveActivationRequestToStore(request);
       return request;
     });
 

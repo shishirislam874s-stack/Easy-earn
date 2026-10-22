@@ -216,6 +216,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Fast background auto-poll for inactive users: as soon as admin approves, ID becomes active instantly
+  useEffect(() => {
+    if (!user || user.isActive) return;
+
+    const interval = setInterval(() => {
+      refreshUserData();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [user?.isActive, user?.id]);
+
   const login = async (phone: string, pass: string) => {
     try {
       const cleanPhone = (phone || '').trim().replace(/[\s\-]/g, '');
