@@ -11,6 +11,17 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'earn_app_default_session_s
 import fs from 'fs';
 import path from 'path';
 
+// Cloudflare-aware IP resolver: extracts real visitor IP from Cloudflare header
+export function getClientIp(req: Request): string {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp && typeof cfIp === 'string') return cfIp.trim();
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded && typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return (req.ip || req.socket?.remoteAddress || '127.0.0.1').toString().trim();
+}
+
 // Admin rate limiting: lock for 5 minutes after 5 failed attempts
 interface FailedAttemptInfo {
   count: number;

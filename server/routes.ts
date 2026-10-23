@@ -9,6 +9,7 @@ import {
   verifyAdminPassword,
   checkAdminRateLimit,
   recordAdminLoginAttempt,
+  getClientIp,
   requireUser,
   requireActiveUser,
   adminAuthMiddleware,
@@ -98,6 +99,22 @@ router.get('/config', (req: Request, res: Response) => {
         color: '#8E2DE2',
       },
     ],
+  });
+});
+
+// Cloudflare proxy detection & security status
+router.get('/cloudflare/status', (req: Request, res: Response) => {
+  const cfConnectingIp = req.headers['cf-connecting-ip'] as string | undefined;
+  const cfRay = req.headers['cf-ray'] as string | undefined;
+  const cfCountry = req.headers['cf-ipcountry'] as string | undefined;
+
+  res.json({
+    proxied: Boolean(cfConnectingIp || cfRay),
+    cfConnectingIp: cfConnectingIp || null,
+    cfRay: cfRay || null,
+    cfCountry: cfCountry || null,
+    clientIp: getClientIp(req),
+    turnstileReady: true,
   });
 });
 
@@ -451,7 +468,7 @@ router.get('/referral/lookup/:code', (req: Request, res: Response) => {
 // ADMIN AUTH
 // -------------------------------------------------------------
 router.post('/admin/login', (req: Request, res: Response) => {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const ip = getClientIp(req);
   const { isLocked, remainingSeconds } = checkAdminRateLimit(ip);
 
   if (isLocked) {

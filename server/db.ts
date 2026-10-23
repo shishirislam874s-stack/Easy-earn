@@ -92,7 +92,7 @@ function initActiveUsersStore() {
 function initActivationRequestsStore() {
   try {
     if (Array.isArray(seedActivationRequests)) {
-      activationRequestsStore.push(...seedActivationRequests);
+      activationRequestsStore.push(...(seedActivationRequests as unknown as ActivationRequest[]));
     }
     if (fs.existsSync(ACTIVATION_REQUESTS_FILE)) {
       const content = fs.readFileSync(ACTIVATION_REQUESTS_FILE, 'utf-8');

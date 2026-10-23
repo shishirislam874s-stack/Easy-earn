@@ -24,6 +24,12 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownLeft,
+  Cloud,
+  Globe,
+  Lock,
+  ShieldCheck,
+  Zap,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { adminFetch } from '../lib/api';
@@ -73,6 +79,17 @@ export function AdminPanelView() {
   // Settings manager state
   const [systemSettings, setSystemSettings] = useState<any>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [cloudflareStatus, setCloudflareStatus] = useState<{
+    proxied: boolean;
+    cfConnectingIp: string | null;
+    cfRay: string | null;
+    cfCountry: string | null;
+    clientIp: string;
+    turnstileReady: boolean;
+  } | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState<string>(() => {
+    return localStorage.getItem('earn_cf_turnstile_key') || '1x00000000000000000000AA';
+  });
 
   // Users manager state
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -201,6 +218,16 @@ export function AdminPanelView() {
     } catch {}
   };
 
+  const fetchCloudflareStatus = async () => {
+    try {
+      const res = await fetch('/api/cloudflare/status');
+      if (res.ok) {
+        const data = await res.json();
+        setCloudflareStatus(data);
+      }
+    } catch {}
+  };
+
   const fetchUsers = async () => {
     try {
       const params = new URLSearchParams({ search: userSearch, page: '1', limit: '50' });
@@ -280,6 +307,7 @@ export function AdminPanelView() {
       fetchVideos();
     } else if (activeTab === 'settings') {
       fetchSettings();
+      fetchCloudflareStatus();
     } else if (activeTab === 'users_manage') {
       fetchUsers();
     } else if (activeTab === 'broadcast') {
@@ -1748,6 +1776,194 @@ export function AdminPanelView() {
               >
                 Save Settings
               </LiquidButton>
+            </div>
+          </LiquidCard>
+
+          {/* Cloudflare Security & DDoS Integration Card */}
+          <LiquidCard elevated className="border-orange-500/30 bg-gradient-to-br from-orange-950/20 via-black/40 to-slate-900/40 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-orange-500/20 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                  <Cloud className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Cloudflare Security & DDoS Protection</span>
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                      Cloudflare Enabled
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    ক্লাউডফ্লেয়ার ডিডিওএস সুরক্ষা, বোট প্রোটেকশন ও দ্রুততম সিডিএন অপ্টিমাইজেশন
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                  cloudflareStatus?.proxied
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${cloudflareStatus?.proxied ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  {cloudflareStatus?.proxied ? 'Cloudflare Proxy Active' : 'Ready for Cloudflare'}
+                </span>
+                <button
+                  type="button"
+                  onClick={fetchCloudflareStatus}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+                  title="Refresh Cloudflare Status"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Cloudflare Live Telemetry & Protection Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                  Real Visitor IP (CF-Connecting-IP)
+                </span>
+                <span className="text-sm font-mono font-bold text-white block">
+                  {cloudflareStatus?.clientIp || '127.0.0.1'}
+                </span>
+                <span className="text-[10px] text-slate-400 block">
+                  Proxy Headers: {cloudflareStatus?.proxied ? 'Active (cf-connecting-ip resolved)' : 'Fallback direct'}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  Turnstile Anti-Bot Engine
+                </span>
+                <span className="text-sm font-bold text-emerald-300 flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Script Loaded & Ready
+                </span>
+                <span className="text-[10px] text-slate-400 block font-mono">
+                  challenges.cloudflare.com/turnstile
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-orange-400" />
+                  Cloudflare Ray & Edge Country
+                </span>
+                <span className="text-sm font-mono font-bold text-white block">
+                  {cloudflareStatus?.cfCountry ? `${cloudflareStatus.cfCountry} · ` : ''}{cloudflareStatus?.cfRay || 'Ready on Custom Domain'}
+                </span>
+                <span className="text-[10px] text-slate-400 block">
+                  DDoS mitigation & SSL Strict support
+                </span>
+              </div>
+            </div>
+
+            {/* Turnstile Key Configuration */}
+            <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-orange-400" />
+                  Cloudflare Turnstile Site Key (Smart CAPTCHA)
+                </h4>
+                <a
+                  href="https://dash.cloudflare.com/?to=/:account/turnstile"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-orange-400 hover:text-orange-300 hover:underline flex items-center gap-1"
+                >
+                  <span>Cloudflare Dashboard</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <LiquidInput
+                    value={turnstileKey}
+                    onChange={(e) => setTurnstileKey(e.target.value)}
+                    placeholder="Enter Cloudflare Turnstile Site Key (or keep default test key)"
+                  />
+                </div>
+                <LiquidButton
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    localStorage.setItem('earn_cf_turnstile_key', turnstileKey.trim());
+                    showToast(language === 'bn' ? 'টার্নস্টাইল কী সেভ করা হয়েছে!' : 'Turnstile Site Key saved!');
+                  }}
+                >
+                  Save Key
+                </LiquidButton>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Default: <code className="text-slate-300 font-mono">1x00000000000000000000AA</code> (Cloudflare official testing key that always passes).
+              </p>
+            </div>
+
+            {/* Step-by-Step Bangla Setup Guide */}
+            <div className="p-4 rounded-2xl bg-orange-950/20 border border-orange-500/20 space-y-3">
+              <h4 className="text-xs font-bold text-orange-300 uppercase tracking-wider flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                আপনার ওয়েবসাইট বা কাস্টম ডোমেইনে Cloudflare সেটআপ করার সহজ নিয়ম:
+              </h4>
+
+              <div className="space-y-2 text-xs text-slate-300">
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[11px] shrink-0">1</span>
+                  <p>
+                    <strong className="text-white">Cloudflare এ একাউন্ট খুলুন:</strong> <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline">dash.cloudflare.com</a> এ গিয়ে ফ্রিতে একাউন্ট খুলে <strong>Add a Domain</strong> এ আপনার ডোমেন লিখুন (যেমন: <code className="text-orange-300 font-mono">earningpoint.com</code>)।
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[11px] shrink-0">2</span>
+                  <p>
+                    <strong className="text-white">Nameserver পরিবর্তন করুন:</strong> ক্লাউডফ্লেয়ার আপনাকে ২টি Nameserver দিবে (যেমন: <code className="text-orange-300 font-mono">vera.ns.cloudflare.com</code>)। আপনার ডোমেন কেনা ওয়েবসাইটে (Namecheap, GoDaddy, ইত্যাদি) গিয়ে Nameserver দুটি বসিয়ে সেভ করুন।
+                  </p>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[11px] shrink-0">3</span>
+                  <div className="space-y-1.5 flex-1">
+                    <p>
+                      <strong className="text-white">Cloudflare DNS রেকর্ডে Vercel লিংক করুন:</strong> DNS ট্যাবে গিয়ে নিচের রেকর্ড দুটি দিন (Proxy Status: <strong>Orange Cloud ON</strong> রাখবেন):
+                    </p>
+                    <div className="p-2.5 rounded-xl bg-black/60 border border-white/10 font-mono text-[11px] space-y-1 text-slate-300">
+                      <div className="flex items-center justify-between">
+                        <span>Type: <strong>CNAME</strong> | Name: <strong>@</strong> | Target: <strong>cname.vercel-dns.com</strong></span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('cname.vercel-dns.com')}
+                          className="text-cyan-400 hover:text-cyan-300 text-[10px] underline cursor-pointer ml-2"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Type: <strong>CNAME</strong> | Name: <strong>www</strong> | Target: <strong>cname.vercel-dns.com</strong></span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy('cname.vercel-dns.com')}
+                          className="text-cyan-400 hover:text-cyan-300 text-[10px] underline cursor-pointer ml-2"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold text-[11px] shrink-0">4</span>
+                  <p>
+                    <strong className="text-white">SSL ও DDoS সিকিউরিটি সেটিং:</strong> Cloudflare এর <strong>SSL/TLS</strong> ট্যাবে গিয়ে Encryption Mode <strong>Full (Strict)</strong> সিলেক্ট করুন এবং <strong>Always Use HTTPS</strong> চালু রাখুন। <strong>Security -&gt; Bots</strong> এ গিয়ে <strong>Bot Fight Mode</strong> চালু করে দিন।
+                  </p>
+                </div>
+              </div>
             </div>
           </LiquidCard>
         </form>

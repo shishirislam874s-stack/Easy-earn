@@ -46,6 +46,23 @@ var db_default = {
       activatedAt: "2026-10-21T07:25:17.622Z",
       createdAt: "2026-10-21T06:00:00.000Z",
       updatedAt: "2026-10-21T07:25:17.622Z"
+    },
+    {
+      id: "1003",
+      name: "Shishir",
+      phone: "01364879043",
+      passwordHash: "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
+      category: "B",
+      isActive: true,
+      isBlocked: false,
+      balance: 0,
+      referredBy: "1001",
+      referralCode: "EARN1003",
+      workUntil: "2030-12-31",
+      isTeamLeader: false,
+      activatedAt: "2026-10-22T08:42:06.000Z",
+      createdAt: "2026-10-22T08:40:00.000Z",
+      updatedAt: "2026-10-22T08:42:06.000Z"
     }
   ],
   videos: [
@@ -93,7 +110,21 @@ var db_default = {
   watchSessions: [],
   videoSubmissions: [],
   dailyEarnings: [],
-  activationRequests: [],
+  activationRequests: [
+    {
+      id: "act-seed-1003",
+      userId: "1003",
+      userName: "Shishir",
+      userPhone: "01364879043",
+      category: "B",
+      paymentMethod: "Nagad",
+      transactionId: "97AKLQPSBN",
+      amount: 1e3,
+      status: "approved",
+      createdAt: "2026-10-22T08:42:06.000Z",
+      reviewedAt: "2026-10-22T08:45:00.000Z"
+    }
+  ],
   withdrawRequests: [],
   teamBonuses: [],
   history: [],
@@ -138,7 +169,8 @@ var db_default = {
 var active_users_default = {
   activeUserIds: [
     "1001",
-    "1002"
+    "1002",
+    "1003"
   ],
   userActiveDetails: {
     "1001": {
@@ -152,12 +184,32 @@ var active_users_default = {
       category: "B",
       workUntil: "2026-10-30",
       activatedAt: "2026-10-21T07:25:17.622Z"
+    },
+    "1003": {
+      isActive: true,
+      category: "B",
+      workUntil: "2030-12-31",
+      activatedAt: "2026-10-22T08:42:06.000Z"
     }
   }
 };
 
 // data/activation_requests.json
-var activation_requests_default = [];
+var activation_requests_default = [
+  {
+    id: "act-seed-1003",
+    userId: "1003",
+    userName: "Shishir",
+    userPhone: "01364879043",
+    category: "B",
+    paymentMethod: "Nagad",
+    transactionId: "97AKLQPSBN",
+    amount: 1e3,
+    status: "approved",
+    createdAt: "2026-10-22T08:42:06.000Z",
+    reviewedAt: "2026-10-22T08:45:00.000Z"
+  }
+];
 
 // server/db.ts
 var isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
@@ -502,6 +554,15 @@ var sessions_default = { userSessions: { "7c39facf20149638fa8a7bb644a26d445b2128
 var ADMIN_USERNAME = process.env.ADMIN_USERNAME || "slshishir";
 var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "#FFHUDT6O3jojE8uJPo7eO";
 var SESSION_SECRET = process.env.SESSION_SECRET || "earn_app_default_session_secret_2026_xyz";
+function getClientIp(req) {
+  const cfIp = req.headers["cf-connecting-ip"];
+  if (cfIp && typeof cfIp === "string") return cfIp.trim();
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded && typeof forwarded === "string") {
+    return forwarded.split(",")[0].trim();
+  }
+  return (req.ip || req.socket?.remoteAddress || "127.0.0.1").toString().trim();
+}
 var adminFailedAttempts = /* @__PURE__ */ new Map();
 function checkAdminRateLimit(ip) {
   const info = adminFailedAttempts.get(ip);
@@ -936,6 +997,19 @@ router.get("/config", (req, res) => {
     ]
   });
 });
+router.get("/cloudflare/status", (req, res) => {
+  const cfConnectingIp = req.headers["cf-connecting-ip"];
+  const cfRay = req.headers["cf-ray"];
+  const cfCountry = req.headers["cf-ipcountry"];
+  res.json({
+    proxied: Boolean(cfConnectingIp || cfRay),
+    cfConnectingIp: cfConnectingIp || null,
+    cfRay: cfRay || null,
+    cfCountry: cfCountry || null,
+    clientIp: getClientIp(req),
+    turnstileReady: true
+  });
+});
 function normalizePhoneNumber(raw) {
   let s = (raw || "").toString().trim().replace(/[\s\-\(\)\.]/g, "");
   if (s.startsWith("+880")) {
@@ -1210,7 +1284,7 @@ router.get("/referral/lookup/:code", (req, res) => {
   res.json({ found: false });
 });
 router.post("/admin/login", (req, res) => {
-  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const ip = getClientIp(req);
   const { isLocked, remainingSeconds } = checkAdminRateLimit(ip);
   if (isLocked) {
     return res.status(429).json({

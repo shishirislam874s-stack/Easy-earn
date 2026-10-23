@@ -33,6 +33,23 @@
       "activatedAt": "2026-10-21T07:25:17.622Z",
       "createdAt": "2026-10-21T06:00:00.000Z",
       "updatedAt": "2026-10-21T07:25:17.622Z"
+    },
+    {
+      "id": "1003",
+      "name": "Shishir",
+      "phone": "01364879043",
+      "passwordHash": "$2b$10$IhrTempsfOE0oVG35Rre4u6/vH/aC1DIiefgGE6d/o9/E17U8H6KG",
+      "category": "B",
+      "isActive": true,
+      "isBlocked": false,
+      "balance": 0,
+      "referredBy": "1001",
+      "referralCode": "EARN1003",
+      "workUntil": "2030-12-31",
+      "isTeamLeader": false,
+      "activatedAt": "2026-10-22T08:42:06.000Z",
+      "createdAt": "2026-10-22T08:40:00.000Z",
+      "updatedAt": "2026-10-22T08:42:06.000Z"
     }
   ],
   "videos": [
@@ -80,7 +97,21 @@
   "watchSessions": [],
   "videoSubmissions": [],
   "dailyEarnings": [],
-  "activationRequests": [],
+  "activationRequests": [
+    {
+      "id": "act-seed-1003",
+      "userId": "1003",
+      "userName": "Shishir",
+      "userPhone": "01364879043",
+      "category": "B",
+      "paymentMethod": "Nagad",
+      "transactionId": "97AKLQPSBN",
+      "amount": 1000,
+      "status": "approved",
+      "createdAt": "2026-10-22T08:42:06.000Z",
+      "reviewedAt": "2026-10-22T08:45:00.000Z"
+    }
+  ],
   "withdrawRequests": [],
   "teamBonuses": [],
   "history": [],
